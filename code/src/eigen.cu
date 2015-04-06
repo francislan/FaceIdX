@@ -4,10 +4,6 @@
 #include <errno.h>
 #include <math.h>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#include "nice_print.h"
-
 #define INITIAL_SIZE 100000
 #define PARTIAL_SIZE 10000
 #define THREADS_PER_BLOCK 256
