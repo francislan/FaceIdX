@@ -7,7 +7,7 @@ ODIR = obj
 _DEPS = nice_print.h stb_image.h count_prime.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
-_OBJ = FaceIdX.o
+_OBJ = FaceIdX.o eigen.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 
