@@ -5,8 +5,8 @@
 #include <math.h>
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "include/stb_image.h"
-#include "include/nice_print.h"
+#include "stb_image.h"
+#include "nice_print.h"
 
 #define INITIAL_SIZE 100000
 #define PARTIAL_SIZE 10000

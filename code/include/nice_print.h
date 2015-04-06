@@ -8,4 +8,4 @@
 #define KBLU  "\x1B[34m"
 #define KWHT  "\x1B[37m"
 
-#endif NICE_PRINT_H
+#endif
