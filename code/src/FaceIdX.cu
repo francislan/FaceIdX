@@ -10,8 +10,8 @@ int main(int argc, char **argv)
 {
     cudaDeviceProp prop;
     int whichDevice;
-    GPU_CHECKERROR(cudaGetDevice(&whichDevice));
-    GPU_CHECKERROR(cudaGetDeviceProperties(&prop, whichDevice));
+    cudaGetDevice(&whichDevice);
+    cudaGetDeviceProperties(&prop, whichDevice);
     if (!prop.deviceOverlap) {
         printf( "Device will not handle overlaps, so no speed up from streams\n" );
         return 0;
