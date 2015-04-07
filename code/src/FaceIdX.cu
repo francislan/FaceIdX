@@ -21,11 +21,13 @@ int main(int argc, char **argv)
     unsigned char *data = NULL;
     int w, h, n;
 
-    data = loadImage("../../data/nottingham/f005a.png", &w, &h, &n, 0);
+    data = loadImage("../../Data/nottingham/original/f005a.png", &w, &h, &n, 1);
     if (data == NULL) {
         printf(KYEL "[Warning]: file could not be loaded.");
     } else {
-        printf("Image width: %d, height: %d\n", w, h);
+        printf("Image width: %d, height: %d, comp: %d\n", w, h, n);
+        printf("grey: %d\n", data[(0*w+0)* n + 0]);
+        printf("grey: %d\n", data[(75*w+125)* n + 0]);
     }
 
     count_prime(argc, argv);
