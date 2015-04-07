@@ -18,14 +18,15 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    struct Image image = loadImage("../../Data/nottingham/original/f005a.png", 1);
+    struct Image image = load_image("../../Data/nottingham/original/f005a.png", 1);
     if (image.data == NULL) {
         printf(KYEL "[Warning]: file could not be loaded.");
     } else {
         printf("Image width: %d, height: %d, comp: %d\n", image.w, image.h, image.comp);
-        printf("grey: %d\n", image.data[(0*image.w+0)* image.comp + 0]);
-        printf("grey: %d\n", image.data[(75*image.w+125)* image.comp + 0]);
+        printf("grey: %d\n", get_pixel(image, 0, 0, 0));
+        printf("grey: %d\n", get_pixel(image, 156, 15, 0));
     }
+    free_image(image);
 
     return EXIT_SUCCESS;
 }
