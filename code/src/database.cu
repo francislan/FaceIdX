@@ -8,10 +8,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#define INITIAL_SIZE 100000
-#define PARTIAL_SIZE 10000
-#define THREADS_PER_BLOCK 256
- 
 // error checking for CUDA calls: use this around ALL your calls!
 #define GPU_CHECKERROR(err) (gpuCheckError(err, __FILE__, __LINE__ ))
 static void gpuCheckError(cudaError_t err,
