@@ -21,7 +21,7 @@ int main(int argc, char **argv)
     unsigned char *data = NULL;
     int w, h, n;
 
-    data = loadImage("../../Data/nottingham/original/f005a.png", &w, &h, &n, 1);
+//    data = loadImage("../../Data/nottingham/original/f005a.png", &w, &h, &n, 1);
     if (data == NULL) {
         printf(KYEL "[Warning]: file could not be loaded.");
     } else {
@@ -30,6 +30,5 @@ int main(int argc, char **argv)
         printf("grey: %d\n", data[(75*w+125)* n + 0]);
     }
 
-    count_prime(argc, argv);
     return EXIT_SUCCESS;
 }
