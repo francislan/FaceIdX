@@ -4,7 +4,7 @@
 #include <errno.h>
 
 #include "nice_print.h"
-#include "count_prime.h"
+#include "eigen.h"
 
 int main(int argc, char **argv)
 {
