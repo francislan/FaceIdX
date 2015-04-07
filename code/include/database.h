@@ -26,7 +26,7 @@ struct Dataset {
 	struct FaceCoordinates *faces; //malloc
 };
 
-struct Image loadImage(char *filename, int *w, int *h, int *comp, int req_comp);
+struct Image loadImage(char *filename, int req_comp);
 void freeImage(unsigned char *data);
 int get_pixel(struct Image image, int x, int y, int comp);
 
