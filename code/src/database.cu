@@ -22,6 +22,6 @@ void free_image(struct Image image) {
 }
 
 // Assumes the image is loaded and x and y are correct coordinates
-char get_pixel(struct Image image, int x, int y, int comp) {
+unsigned char get_pixel(struct Image image, int x, int y, int comp) {
     return image.data[(y * image.w + x) * image.comp + comp];
 }

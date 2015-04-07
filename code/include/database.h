@@ -28,7 +28,7 @@ struct Dataset {
 
 struct Image load_image(char *filename, int req_comp);
 void free_image(struct Image image);
-char get_pixel(struct Image image, int x, int y, int comp);
+unsigned char get_pixel(struct Image image, int x, int y, int comp);
 
 int create_dataset(char *directory, char *dataset_path, char *name);
 int load_dataset(char *dataset_path);
