@@ -4,10 +4,10 @@ CFLAGS = -I$(IDIR) -arch=sm_30 -fmad=false
 
 ODIR = obj
 
-_DEPS = nice_print.h stb_image.h eigen.h
+_DEPS = nice_print.h stb_image.h eigen.h database.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
-_OBJ = FaceIdX.o eigen.o
+_OBJ = FaceIdX.o eigen.o database.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 
