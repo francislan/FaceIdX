@@ -18,16 +18,13 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    unsigned char *data = NULL;
-    int w, h, n;
-
-//    data = loadImage("../../Data/nottingham/original/f005a.png", &w, &h, &n, 1);
-    if (data == NULL) {
+    struct Image image = loadImage("../../Data/nottingham/original/f005a.png", 1);
+    if (image.data == NULL) {
         printf(KYEL "[Warning]: file could not be loaded.");
     } else {
-        printf("Image width: %d, height: %d, comp: %d\n", w, h, n);
-        printf("grey: %d\n", data[(0*w+0)* n + 0]);
-        printf("grey: %d\n", data[(75*w+125)* n + 0]);
+        printf("Image width: %d, height: %d, comp: %d\n", image.w, image.h, image.comp);
+        printf("grey: %d\n", image.data[(0*w+0)* n + 0]);
+        printf("grey: %d\n", image.data[(75*w+125)* n + 0]);
     }
 
     return EXIT_SUCCESS;

@@ -20,8 +20,12 @@ static void gpuCheckError(cudaError_t err,
     }
 }
 
-unsigned char * loadImage(char *filename, int *w, int *h, int *comp, int req_comp) {
-    return stbi_load(filename, w, h, comp, req_comp);
+struct Image loadImage(char *filename, int req_comp) {
+    struct Image image;
+    image.data = stbi_load(filename, &(image.w), &(image.h), &(image.comp), req_comp);
+    image.filename = filename;
+    image.req_comp = req_comp;
+    return image;
 }
 
 void freeImage(unsigned char *data) {
