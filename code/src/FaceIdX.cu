@@ -23,8 +23,8 @@ int main(int argc, char **argv)
         printf(KYEL "[Warning]: file could not be loaded.");
     } else {
         printf("Image width: %d, height: %d, comp: %d\n", image.w, image.h, image.comp);
-        printf("grey: %d\n", image.data[(0*w+0)* n + 0]);
-        printf("grey: %d\n", image.data[(75*w+125)* n + 0]);
+        printf("grey: %d\n", image.data[(0*image.w+0)* image.comp + 0]);
+        printf("grey: %d\n", image.data[(75*image.w+125)* image.comp + 0]);
     }
 
     return EXIT_SUCCESS;
