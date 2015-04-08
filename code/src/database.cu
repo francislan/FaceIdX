@@ -9,29 +9,31 @@
 #include "stb_image.h"
 
 // User has to call free_image
-struct Image load_image(const char *filename, int req_comp) {
-    struct Image image;
-    image.data = stbi_load(filename, &(image.w), &(image.h), &(image.comp), req_comp);
-    image.filename = filename;
-    image.req_comp = req_comp;
+struct Image * load_image(const char *filename, int req_comp) {
+    struct Image *image = malloc(sizeof(struct Image));
+    // check malloc
+    image->data = stbi_load(filename, &(image->w), &(image->h), &(image->comp), req_comp);
+    strcpy(image->filename, filename); // buffer overflow
+    image->req_comp = req_comp;
     return image;
 }
 
-void free_image(struct Image image) {
-    stbi_image_free(image.data);
+void free_image(struct Image *image) {
+    stbi_image_free(image->data);
+    free(image);
 }
 
 // Assumes the image is loaded and x and y are correct coordinates
-unsigned char get_pixel(struct Image image, int x, int y, int comp) {
-    return image.data[(y * image.w + x) * image.comp + comp];
+unsigned char get_pixel(struct Image *image, int x, int y, int comp) {
+    return image->data[(y * image->w + x) * image->comp + comp];
 }
 
 
-struct Dataset create_dataset(const char *directory, const char *dataset_path, char *name) {
+struct Dataset * create_dataset(const char *directory, const char *dataset_path, const char *name) {
     char * line = NULL;
     size_t len = 0;
     int num_images = 0;
-    struct Dataset dataset = {0};
+    struct Dataset *dataset = NULL;
     char command[200] = ""; // careful buffer overflow
     sprintf(command, "ls %s | grep png", directory);
 
@@ -56,7 +58,25 @@ struct Dataset create_dataset(const char *directory, const char *dataset_path, c
     }
 
     printf(KBLU "[Info]: %d images found in directory.\n", num_images);
+    rewind(fp);
 
+    dataset = malloc(sizeof(struct Dataset));
+    // check malloc
+    dataset->name = name;
+    dataset->path = dataset_path;
+    dataset->original_images = malloc(num_images * sizeof(struct Image *));
+    // check malloc
+
+    int i = 0;
+    while (getline(&line, &len, fp) != -1) {
+        if (line[strlen(line) - 1] == '\n')
+            line[strlen(line) - 1 ] = '\0';
+        char image_name[100] = "";
+        strcpy(image_name, directory);
+        strcat(image_name, "/");
+        strcat(image_name, line);
+        dataset->original_images[i++] = load_image(image_name, 1);
+    }
 
 
 end:
