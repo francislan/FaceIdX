@@ -9,7 +9,7 @@
 #include "stb_image.h"
 
 // User has to call free_image
-struct Image load_image(char *filename, int req_comp) {
+struct Image load_image(const char *filename, int req_comp) {
     struct Image image;
     image.data = stbi_load(filename, &(image.w), &(image.h), &(image.comp), req_comp);
     image.filename = filename;
@@ -28,8 +28,7 @@ unsigned char get_pixel(struct Image image, int x, int y, int comp) {
 
 
 // Returns 0 if no error
-int create_dataset(char *directory, char *dataset_path, char *name) {
+int create_dataset(const char *directory, const char *dataset_path, char *name) {
     FILE *fp = popen("ls `directory` | grep png", "r");
-    fscanf(fp, "%s %s %s %s %s", filename, filename, date, filename, hour);
-    pclose(fp);fp
+    pclose(fp);
 }
