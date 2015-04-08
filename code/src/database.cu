@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "database.h"
+#include "nice_print.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -29,9 +30,8 @@ unsigned char get_pixel(struct Image image, int x, int y, int comp) {
 struct Dataset create_dataset(const char *directory, const char *dataset_path, char *name) {
     char * line = NULL;
     size_t len = 0;
-    ssize_t read;
     int num_images = 0;
-    struct Dataset dataset = NULL;
+    struct Dataset dataset = {0};
 
     FILE *fp = popen("ls `directory` | grep png", "r");
     if (fp == NULL) {
@@ -39,7 +39,7 @@ struct Dataset create_dataset(const char *directory, const char *dataset_path, c
         exit(EXIT_FAILURE);
     }
 
-    while ((read = getline(&line, &len, fp)) != -1) {
+    while (getline(&line, &len, fp) != -1) {
         if strstr(line, "No such file or directory") {
             printf(KYEL "[Warning]: No such directory.");
             goto end;
