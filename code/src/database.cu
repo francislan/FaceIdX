@@ -40,7 +40,7 @@ struct Dataset create_dataset(const char *directory, const char *dataset_path, c
     }
 
     while (getline(&line, &len, fp) != -1) {
-        if (strstr(line, "No such file or directory")) {
+        if (strstr(line, "No such file or directory") || strstr(line, "not found")) {
             printf(KYEL "[Warning]: No such directory.\n");
             goto end;
         }
