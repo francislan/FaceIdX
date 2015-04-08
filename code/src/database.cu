@@ -10,7 +10,7 @@
 
 // User has to call free_image
 struct Image * load_image(const char *filename, int req_comp) {
-    struct Image *image = malloc(sizeof(struct Image));
+    struct Image *image = (struct Image *)malloc(sizeof(struct Image));
     // check malloc
     image->data = stbi_load(filename, &(image->w), &(image->h), &(image->comp), req_comp);
     strcpy(image->filename, filename); // buffer overflow
@@ -60,11 +60,11 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
     printf(KBLU "[Info]: %d images found in directory.\n", num_images);
     rewind(fp);
 
-    dataset = malloc(sizeof(struct Dataset));
+    dataset = (struct Dataset *)malloc(sizeof(struct Dataset));
     // check malloc
     dataset->name = name;
     dataset->path = dataset_path;
-    dataset->original_images = malloc(num_images * sizeof(struct Image *));
+    dataset->original_images = (struct Image **)malloc(num_images * sizeof(struct Image *));
     // check malloc
 
     int i = 0;
