@@ -35,24 +35,24 @@ struct Dataset create_dataset(const char *directory, const char *dataset_path, c
 
     FILE *fp = popen("ls `directory` | grep png", "r");
     if (fp == NULL) {
-        printf(KRED "[Error]: Cannot scan directory!");
+        printf(KRED "[Error]: Cannot scan directory!\n");
         exit(EXIT_FAILURE);
     }
 
     while (getline(&line, &len, fp) != -1) {
         if (strstr(line, "No such file or directory")) {
-            printf(KYEL "[Warning]: No such directory.");
+            printf(KYEL "[Warning]: No such directory.\n");
             goto end;
         }
         num_images++;
     }
 
     if (!num_images) {
-        printf(KYEL "[Warning]: No image in directory.");
+        printf(KYEL "[Warning]: No image in directory.\n");
         goto end;
     }
 
-    printf(KBLU "[Info]: %d images found in directory.", num_images);
+    printf(KBLU "[Info]: %d images found in directory.\n", num_images);
 
 
 end:
