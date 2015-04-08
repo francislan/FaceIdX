@@ -28,5 +28,7 @@ int main(int argc, char **argv)
     }
     free_image(image);
 
+    struct Dataset dataset = create_dataset("../../Data/nottingham/normalized", "./dataset.dat", "Set 1");
+
     return EXIT_SUCCESS;
 }

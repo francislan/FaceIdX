@@ -1,8 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <cuda.h>
 #include <errno.h>
-#include <math.h>
+#include <string.h>
 
 #include "database.h"
 #define STB_IMAGE_IMPLEMENTATION
@@ -27,8 +26,39 @@ unsigned char get_pixel(struct Image image, int x, int y, int comp) {
 }
 
 
-// Returns 0 if no error
-int create_dataset(const char *directory, const char *dataset_path, char *name) {
+struct Dataset create_dataset(const char *directory, const char *dataset_path, char *name) {
+    char * line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    int num_images = 0;
+    struct Dataset dataset = NULL;
+
     FILE *fp = popen("ls `directory` | grep png", "r");
-    pclose(fp);
+    if (fp == NULL) {
+        printf(KRED "[Error]: Cannot scan directory!")
+        exit(EXIT_FAILURE);
+    }
+
+    while ((read = getline(&line, &len, fp)) != -1) {
+        if strstr(line, "No such file or directory") {
+            printf(KYEL "[Warning]: No such directory.");
+            goto end;
+        }
+        num_images++;
+    }
+
+    if (!num_images) {
+        printf(KYEL "[Warning]: No image in directory.");
+        goto end;
+    }
+
+    printf(KBLU "[Info]: %d images found in directory.", num_images);
+
+
+end:
+    fclose(fp);
+    if (line)
+        free(line);
+
+    return dataset;
 }
