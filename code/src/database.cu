@@ -33,8 +33,10 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
     char * line = NULL;
     size_t len = 0;
     int num_images = 0;
+    int i = 0;
     struct Dataset *dataset = NULL;
     char command[200] = ""; // careful buffer overflow
+
     sprintf(command, "ls %s | grep png", directory);
 
     FILE *fp = popen(command, "r");
@@ -67,7 +69,6 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
     dataset->original_images = (struct Image **)malloc(num_images * sizeof(struct Image *));
     // check malloc
 
-    int i = 0;
     while (getline(&line, &len, fp) != -1) {
         if (line[strlen(line) - 1] == '\n')
             line[strlen(line) - 1 ] = '\0';
