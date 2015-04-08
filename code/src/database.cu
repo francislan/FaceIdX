@@ -25,3 +25,11 @@ void free_image(struct Image image) {
 unsigned char get_pixel(struct Image image, int x, int y, int comp) {
     return image.data[(y * image.w + x) * image.comp + comp];
 }
+
+
+// Returns 0 if no error
+int create_dataset(char *directory, char *dataset_path, char *name) {
+    FILE *fp = popen("ls `directory` | grep png", "r");
+    fscanf(fp, "%s %s %s %s %s", filename, filename, date, filename, hour);
+    pclose(fp);fp
+}
