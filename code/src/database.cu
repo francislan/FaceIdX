@@ -32,8 +32,10 @@ struct Dataset create_dataset(const char *directory, const char *dataset_path, c
     size_t len = 0;
     int num_images = 0;
     struct Dataset dataset = {0};
+    char command[200] = ""; // careful buffer overflow
+    sprintf(command, "ls %s | grep png", directory);
 
-    FILE *fp = popen("ls `directory` | grep png", "r");
+    FILE *fp = popen(command, "r");
     if (fp == NULL) {
         printf(KRED "[Error]: Cannot scan directory!\n");
         exit(EXIT_FAILURE);
