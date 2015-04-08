@@ -20,6 +20,7 @@ struct Dataset {
 	const char *name;
 	const char *path;
 	int num_eigenfaces;
+	int num_images;
 	int w;
 	int h;
 	struct Image **original_images; //malloc

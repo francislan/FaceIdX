@@ -29,6 +29,13 @@ int main(int argc, char **argv)
     free_image(image);
 
     struct Dataset *dataset = create_dataset("../../Data/nottingham/normalized", "./dataset.dat", "Set 1");
-
+    printf(KNRM "Dataset name: %s\n", dataset->name);
+    printf(KNRM "Dataset path: %s\n", dataset->path);
+    printf(KNRM "Dataset num_images: %d\n", dataset->num_images);
+    for (int i = 0; i < dataset-> num_images; i++) {
+        printf(KNRM "\tImage %d: %s\n", i + 1, dataset->original_images[i]->name);
+        printf(KNRM "grey 0, 0: %d\n", get_pixel(dataset->original_images[i], 0, 0, 0));
+        printf(KNRM "grey 156, 15: %d\n", get_pixel(dataset->original_images[i], 156, 15, 0));
+    }
     return EXIT_SUCCESS;
 }
