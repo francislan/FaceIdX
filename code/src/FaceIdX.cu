@@ -18,11 +18,11 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    struct Image image = load_image("../../Data/nottingham/normalized/f005a.png", 1);
-    if (image.data == NULL) {
+    struct Image *image = load_image("../../Data/nottingham/normalized/f005a.png", 1);
+    if (image->data == NULL) {
         printf(KYEL "[Warning]: file could not be loaded.\n");
     } else {
-        printf(KNRM "Image width: %d, height: %d, comp: %d\n", image.w, image.h, image.comp);
+        printf(KNRM "Image width: %d, height: %d, comp: %d\n", image->w, image->h, image->comp);
         printf(KNRM "grey: %d\n", get_pixel(image, 0, 0, 0));
         printf(KNRM "grey: %d\n", get_pixel(image, 156, 15, 0));
     }
