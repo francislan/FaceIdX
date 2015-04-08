@@ -32,7 +32,6 @@ struct Image load_image(const char *filename, int req_comp);
 void free_image(struct Image image);
 unsigned char get_pixel(struct Image image, int x, int y, int comp);
 struct Dataset * create_dataset(const char *directory, const char *dataset_path, const char *name);
-:wq
 
 struct Dataset * load_dataset(const char *dataset_path);
 void free_dataset(struct Dataset *dataset);
