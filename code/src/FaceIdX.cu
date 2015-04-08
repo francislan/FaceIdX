@@ -33,7 +33,7 @@ int main(int argc, char **argv)
     printf(KNRM "Dataset path: %s\n", dataset->path);
     printf(KNRM "Dataset num_images: %d\n", dataset->num_images);
     for (int i = 0; i < dataset-> num_images; i++) {
-        printf(KNRM "\tImage %d: %s\n", i + 1, dataset->original_images[i]->name);
+        printf(KNRM "\tImage %d: %s\n", i + 1, dataset->original_images[i]->filename);
         printf(KNRM "grey 0, 0: %d\n", get_pixel(dataset->original_images[i], 0, 0, 0));
         printf(KNRM "grey 156, 15: %d\n", get_pixel(dataset->original_images[i], 156, 15, 0));
     }
