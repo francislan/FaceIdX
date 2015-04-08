@@ -18,15 +18,25 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    struct Image image = load_image("../../Data/nottingham/original/f005a.png", 1);
-    if (image.data == NULL) {
-        printf(KYEL "[Warning]: file could not be loaded.");
+    struct Image *image = load_image("../../Data/nottingham/normalized/f005a.png", 1);
+    if (image->data == NULL) {
+        printf(KYEL "[Warning]: file could not be loaded.\n");
     } else {
-        printf("Image width: %d, height: %d, comp: %d\n", image.w, image.h, image.comp);
-        printf("grey: %d\n", get_pixel(image, 0, 0, 0));
-        printf("grey: %d\n", get_pixel(image, 156, 15, 0));
+        printf(KNRM "Image width: %d, height: %d, comp: %d\n", image->w, image->h, image->comp);
+        printf(KNRM "grey: %d\n", get_pixel(image, 0, 0, 0));
+        printf(KNRM "grey: %d\n", get_pixel(image, 156, 15, 0));
     }
     free_image(image);
 
+    struct Dataset *dataset = create_dataset("../../Data/nottingham/normalized", "./dataset.dat", "Set 1");
+    printf(KNRM "Dataset name: %s\n", dataset->name);
+    printf(KNRM "Dataset path: %s\n", dataset->path);
+    printf(KNRM "Dataset num_images: %d\n", dataset->num_images);
+    for (int i = 0; i < dataset-> num_images; i++) {
+        printf(KNRM "\tImage %d: %s\n", i + 1, dataset->original_images[i]->filename);
+        printf(KNRM "grey 0, 0: %d\n", get_pixel(dataset->original_images[i], 0, 0, 0));
+        printf(KNRM "grey 156, 15: %d\n", get_pixel(dataset->original_images[i], 156, 15, 0));
+    }
+    free_dataset(dataset);
     return EXIT_SUCCESS;
 }
