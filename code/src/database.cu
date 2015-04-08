@@ -80,7 +80,7 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
         strcat(image_name, "/");
         strcat(image_name, line);
         dataset->original_images[i++] = load_image(image_name, 1);
-        printf(KGRN "[Debug]: dataset->original_images[i-1]->filename");
+        printf(KGRN "[Debug]: filename: %s\n", dataset->original_images[i-1]->filename);
     }
 
 
