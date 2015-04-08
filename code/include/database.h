@@ -7,7 +7,7 @@ struct Image {
 	int h;
 	int comp;
 	int req_comp;
-	char *filename;
+	const char *filename;
 };
 
 struct FaceCoordinates {
