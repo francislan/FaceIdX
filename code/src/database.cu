@@ -46,6 +46,7 @@ struct Dataset create_dataset(const char *directory, const char *dataset_path, c
             printf(KYEL "[Warning]: No such directory.\n");
             goto end;
         }
+        printf(KNRM "filename: %s\n", line);
         num_images++;
     }
 
@@ -55,6 +56,7 @@ struct Dataset create_dataset(const char *directory, const char *dataset_path, c
     }
 
     printf(KBLU "[Info]: %d images found in directory.\n", num_images);
+
 
 
 end:
