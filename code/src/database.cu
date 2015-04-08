@@ -50,7 +50,6 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
             printf(KYEL "[Warning]: No such directory.\n");
             goto end;
         }
-        printf(KNRM "filename: %s\n", line);
         num_images++;
     }
 
@@ -91,3 +90,20 @@ end:
 
     return dataset;
 }
+
+void free_dataset(struct Dataset *dataset) {
+    for (int i = 0; i < dataset->num_images; i++)
+	free_image(dataset->original_images[i]);
+    free(dataset->original_images);
+
+    for (int i = 0; i < dataset->num_eigenfaces; i++)
+	free_image(dataset->eigenfaces[i]);
+    free(dataset->eigenfaces);
+
+/*    for (int i = 0; i < dataset->num_faces; i++)
+	free_face(dataset->faces[i]);
+    free(dataset->faces);
+*/
+    free(dataset);
+}
+

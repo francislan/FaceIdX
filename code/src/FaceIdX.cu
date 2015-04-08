@@ -37,5 +37,6 @@ int main(int argc, char **argv)
         printf(KNRM "grey 0, 0: %d\n", get_pixel(dataset->original_images[i], 0, 0, 0));
         printf(KNRM "grey 156, 15: %d\n", get_pixel(dataset->original_images[i], 156, 15, 0));
     }
+    free_dataset(dataset);
     return EXIT_SUCCESS;
 }
