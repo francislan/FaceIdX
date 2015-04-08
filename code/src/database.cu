@@ -60,7 +60,9 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
     }
 
     printf(KBLU "[Info]: %d images found in directory.\n", num_images);
-    fseek(fp, 0, SEEK_SET);
+
+    fclose(fp);
+    FILE *fp = popen(command, "r"); // run the command twice, not optimal, and possible exploit
 
     dataset = (struct Dataset *)malloc(sizeof(struct Dataset));
     // check malloc
