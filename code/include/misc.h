@@ -22,6 +22,10 @@ do { \
 		printf("\x1B[34m" "[INFO]: "); \
 		printf("\x1B[34m" fmt, ##__VA_ARGS__); \
 		printf("\x1B[0m" ""); \
+	} else if (!strcmp(level, "DEBUG")) { \
+		printf("\x1B[32m" "[DEBUG]: "); \
+		printf("\x1B[32m" fmt, ##__VA_ARGS__); \
+		printf("\x1B[0m" ""); \
 	} else { \
 		printf("\x1B[0m" fmt, ##__VA_ARGS__); \
 	} \
