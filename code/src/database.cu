@@ -36,7 +36,7 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
     size_t len = 0;
     int num_images = 0;
     int i = 0;
-    int w = 0; h = 0;
+    int w = 0, h = 0;
     struct Dataset *dataset = NULL;
     char command[200] = ""; // careful buffer overflow
 

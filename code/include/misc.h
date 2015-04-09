@@ -34,7 +34,7 @@ do { \
 #define TEST_MALLOC(p) \
 do { \
 	if ((p) == NULL) { \
-		printf("ERROR: malloc failed\n"); \
+		printf("\x1B[31m" "[Error]: malloc failed\n"); \
 		exit(1); \
 	} \
 } while(0)
