@@ -19,6 +19,8 @@ struct Image * load_image(const char *filename, int req_comp) {
 }
 
 void free_image(struct Image *image) {
+    if (image == NULL)
+	return;
     stbi_image_free(image->data);
     free(image);
 }
@@ -67,7 +69,7 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
     // check malloc
     dataset->name = name;
     dataset->path = dataset_path;
-    dataset->num_images = num_images;
+    dataset->num_original_images = num_images;
     dataset->original_images = (struct Image **)malloc(num_images * sizeof(struct Image *));
     // check malloc
 
@@ -92,7 +94,7 @@ end:
 }
 
 void free_dataset(struct Dataset *dataset) {
-    for (int i = 0; i < dataset->num_images; i++)
+    for (int i = 0; i < dataset->num_original_images; i++)
 	free_image(dataset->original_images[i]);
     free(dataset->original_images);
 
@@ -104,6 +106,7 @@ void free_dataset(struct Dataset *dataset) {
 	free_face(dataset->faces[i]);
     free(dataset->faces);
 */
+    free_image(dataset->average);
     free(dataset);
 }
 

@@ -1,8 +1,8 @@
 #ifndef EIGEN_H
 #define EIGEN_H
 
-struct Image compute_average_gpu(struct Image *images, int num_images);
-struct Image compute_average_cpu(struct Image *images, int num_images);
+struct Image * compute_average_gpu(struct Dataset * dataset);
+struct Image * compute_average_cpu(struct Dataset * dataset);
 
 #endif
 

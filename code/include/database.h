@@ -20,12 +20,12 @@ struct Dataset {
 	const char *name;
 	const char *path;
 	int num_eigenfaces;
-	int num_images;
+	int num_original_images;
 	int num_faces;
 	int w;
 	int h;
 	struct Image **original_images; //malloc
-	struct Image average;
+	struct Image *average;
 	struct Image **eigenfaces; //malloc
 	struct FaceCoordinates **faces; //malloc
 };
