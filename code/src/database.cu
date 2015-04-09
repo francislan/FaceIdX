@@ -41,25 +41,23 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
 
     FILE *fp = popen(command, "r");
     if (fp == NULL) {
-        //printf(KRED "[Error]: Cannot scan directory!\n");
         PRINT("BUG", "Cannot scan directory!\n");
         exit(EXIT_FAILURE);
     }
 
     while (getline(&line, &len, fp) != -1) {
         if (strstr(line, "No such file or directory") || strstr(line, "not found")) {
-            printf(KYEL "[Warning]: No such directory.\n");
+            PRINT("WARN", "No such directory.\n");
             goto end;
         }
         num_images++;
     }
 
     if (!num_images) {
-        printf(KYEL "[Warning]: No image in directory.\n");
+        PRINT("WARN", "No image in directory.\n");
         goto end;
     }
 
-    //printf(KBLU "[Info]: %d images found in directory.\n", num_images);
     PRINT("INFO", "%d images found in directory.\n", num_images);
 
     fclose(fp);
@@ -81,7 +79,7 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
         strcat(image_name, "/");
         strcat(image_name, line);
         dataset->original_images[i++] = load_image(image_name, 1);
-        printf(KGRN "[Debug]: filename: %s\n", dataset->original_images[i-1]->filename);
+        PRINT("DEBUG", "filename: %s\n", dataset->original_images[i-1]->filename);
     }
 
 
