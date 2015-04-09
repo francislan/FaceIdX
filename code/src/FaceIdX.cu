@@ -29,6 +29,10 @@ int main(int argc, char **argv)
     free_image(image);
 
     struct Dataset *dataset = create_dataset("../../Data/nottingham/normalized", "./dataset.dat", "Set 1");
+    if (dataset == NULL) {
+        PRINT("BUG","Dataset creation failed\n");
+        return EXIT_FAILURE;
+    }
     PRINT("", "Dataset name: %s\n", dataset->name);
     PRINT("", "Dataset path: %s\n", dataset->path);
     PRINT("", "Dataset num_original_images: %d\n", dataset->num_original_images);
@@ -38,6 +42,10 @@ int main(int argc, char **argv)
         PRINT("", "grey 156, 15: %d\n", get_pixel(dataset->original_images[i], 156, 15, 0));
     }
     struct Image *average = compute_average_cpu(dataset);
+    if (average == NULL)
+        PRINT("BUG","average computation failed\n");
+        return EXIT_FAILURE;
+    }
     PRINT("", "grey 0, 0: %d\n", get_pixel(average, 0, 0, 0));
     PRINT("", "grey 156, 15: %d\n", get_pixel(average, 156, 15, 0));
 

@@ -11,7 +11,7 @@
 // User has to call free_image
 struct Image * load_image(const char *filename, int req_comp) {
     struct Image *image = (struct Image *)malloc(sizeof(struct Image));
-    // check malloc
+    TEST_MALLOC(image);
     image->data = stbi_load(filename, &(image->w), &(image->h), &(image->comp), req_comp);
     strcpy(image->filename, filename); // buffer overflow
     image->req_comp = req_comp;
@@ -67,12 +67,12 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
     fp = popen(command, "r"); // run the command twice, not optimal, and possible exploit
 
     dataset = (struct Dataset *)malloc(sizeof(struct Dataset));
-    // check malloc
+    TEST_MALLOC(dataset);
     dataset->name = name;
     dataset->path = dataset_path;
     dataset->num_original_images = num_images;
     dataset->original_images = (struct Image **)malloc(num_images * sizeof(struct Image *));
-    // check malloc
+    TEST_MALLOC(dataset->original_images);
 
     while (getline(&line, &len, fp) != -1) {
         if (line[strlen(line) - 1] == '\n')
