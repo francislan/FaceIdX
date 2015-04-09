@@ -6,6 +6,7 @@
 
 #include "eigen.h"
 #include "database.h"
+#include "misc.h"
 
 #define THREADS_PER_BLOCK 256
 

@@ -3,7 +3,7 @@
 #include <cuda.h>
 #include <errno.h>
 
-#include "nice_print.h"
+#include "misc.h"
 #include "eigen.h"
 #include "database.h"
 

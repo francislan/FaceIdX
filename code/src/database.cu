@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include "database.h"
-#include "nice_print.h"
+#include "misc.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
