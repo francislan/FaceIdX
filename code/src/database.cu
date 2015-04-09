@@ -36,6 +36,7 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
     size_t len = 0;
     int num_images = 0;
     int i = 0;
+    int w = 0; h = 0;
     struct Dataset *dataset = NULL;
     char command[200] = ""; // careful buffer overflow
 
@@ -80,10 +81,23 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
         strcpy(image_name, directory);
         strcat(image_name, "/");
         strcat(image_name, line);
-        dataset->original_images[i++] = load_image(image_name, 1);
+        dataset->original_images[i] = load_image(image_name, 1);
+        if (i == 0) {
+            w = dataset->original_images[0]->w;
+            h = dataset->original_images[0]->h;
+        } else {
+            if (w != dataset->original_images[i]->w || h != dataset->original_images[i]->h) {
+                PRINT("WARN", "Images in directory have different width and/or height. Aborting\n");
+                free_dataset(dataset);
+                dataset = NULL;
+                goto end;
+            }
+        }
+        i++;
         PRINT("DEBUG", "filename: %s\n", dataset->original_images[i-1]->filename);
     }
-
+    dataset->w = w;
+    dataset->h = h;
 
 end:
     fclose(fp);
