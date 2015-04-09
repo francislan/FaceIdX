@@ -42,7 +42,7 @@ int main(int argc, char **argv)
         PRINT("", "grey 156, 15: %d\n", get_pixel(dataset->original_images[i], 156, 15, 0));
     }
     struct Image *average = compute_average_cpu(dataset);
-    if (average == NULL)
+    if (average == NULL) {
         PRINT("BUG","average computation failed\n");
         return EXIT_FAILURE;
     }
