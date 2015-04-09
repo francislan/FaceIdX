@@ -41,7 +41,8 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
 
     FILE *fp = popen(command, "r");
     if (fp == NULL) {
-        printf(KRED "[Error]: Cannot scan directory!\n");
+        //printf(KRED "[Error]: Cannot scan directory!\n");
+        print("BUG", "Cannot scan directory!\n");
         exit(EXIT_FAILURE);
     }
 
@@ -58,7 +59,8 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
         goto end;
     }
 
-    printf(KBLU "[Info]: %d images found in directory.\n", num_images);
+    //printf(KBLU "[Info]: %d images found in directory.\n", num_images);
+    print("INFO", "%d images found in directory.\n", num_images);
 
     fclose(fp);
     fp = popen(command, "r"); // run the command twice, not optimal, and possible exploit

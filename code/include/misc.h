@@ -16,4 +16,22 @@ do { \
 	} \
 } while(0)
 
+inline void print(level, fmt, ...) {
+	if (!strcmp(level, "BUG")) {
+		printf(KRED, "[Error]: ");
+		printf(KRED, fmt, ##__VA_ARGS__);
+		printf(KRNM, "");
+	} else if (!strcmp(level, "WARN")) {
+		printf(KYEL, "[Warning]: ");
+		printf(KYEL, fmt, ##__VA_ARGS__);
+		printf(KRNM, "");
+	} else if (!strcmp(level, "INFO")) {
+		printf(KBLU, "[INFO]: ");
+		printf(KBLU, fmt, ##__VA_ARGS__);
+		printf(KRNM, "");
+	} else {
+		printf(KNRM, fmt, ##__VA_ARGS__);
+	}
+}
+
 #endif
