@@ -11,19 +11,19 @@
 #define PRINT(level, fmt, ...) \
 do { \
 	if (!strcmp(level, "BUG")) { \
-		printf(KRED "[Error]: "); \
-		printf(KRED fmt, ##__VA_ARGS__); \
-		printf(KRNM ""); \
+		printf("\x1B[31m" "[Error]: "); \
+		printf("\x1B[31m" fmt, ##__VA_ARGS__); \
+		printf("\x1B[0m" ""); \
 	} else if (!strcmp(level, "WARN")) { \
-		printf(KYEL "[Warning]: "); \
-		printf(KYEL fmt, ##__VA_ARGS__); \
-		printf(KRNM ""); \
+		printf("\x1B[33m" "[Warning]: "); \
+		printf("\x1B[33m" fmt, ##__VA_ARGS__); \
+		printf("\x1B[0m" ""); \
 	} else if (!strcmp(level, "INFO")) { \
-		printf(KBLU "[INFO]: "); \
-		printf(KBLU fmt, ##__VA_ARGS__); \
-		printf(KRNM ""); \
+		printf("\x1B[34m" "[INFO]: "); \
+		printf("\x1B[34m" fmt, ##__VA_ARGS__); \
+		printf("\x1B[0m" ""); \
 	} else { \
-		printf(KNRM fmt, ##__VA_ARGS__); \
+		printf("\x1B[0m" fmt, ##__VA_ARGS__); \
 	} \
 } while(0)
 
