@@ -49,6 +49,8 @@ int main(int argc, char **argv)
     PRINT("", "grey 0, 0: %d\n", get_pixel(average, 0, 0, 0));
     PRINT("", "grey 156, 15: %d\n", get_pixel(average, 156, 15, 0));
 
+    save_image_to_disk(average);
+
     free_dataset(dataset);
     return EXIT_SUCCESS;
 }

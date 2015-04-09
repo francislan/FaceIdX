@@ -7,6 +7,8 @@
 #include "misc.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 // User has to call free_image
 struct Image * load_image(const char *filename, int req_comp) {
@@ -124,3 +126,6 @@ void free_dataset(struct Dataset *dataset) {
     free(dataset);
 }
 
+void save_image_to_disk(struct Image *image) {
+    stbi_write_png("average.png", image->w, image->h, 1, image->data, 0);
+}

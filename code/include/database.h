@@ -35,6 +35,7 @@ void free_image(struct Image *image);
 unsigned char get_pixel(struct Image *image, int x, int y, int comp);
 struct Dataset * create_dataset(const char *directory, const char *dataset_path, const char *name);
 void free_dataset(struct Dataset *dataset);
+void save_image_to_disk(struct Image *image);
 
 struct Dataset * load_dataset(const char *dataset_path);
 int save_average_to_dataset(struct Dataset *dataset, struct Image *average);

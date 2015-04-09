@@ -4,7 +4,7 @@ CFLAGS = -I$(IDIR) -arch=sm_30 -fmad=false
 
 ODIR = obj
 
-_DEPS = misc.h stb_image.h eigen.h database.h
+_DEPS = misc.h stb_image.h eigen.h database.h stb_image_write.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
 _OBJ = FaceIdX.o eigen.o database.o
