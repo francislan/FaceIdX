@@ -31,7 +31,7 @@ int main(int argc, char **argv)
     struct Dataset *dataset = create_dataset("../../Data/nottingham/normalized", "./dataset.dat", "Set 1");
     PRINT("", "Dataset name: %s\n", dataset->name);
     PRINT("", "Dataset path: %s\n", dataset->path);
-    PRINT("", "Dataset num_images: %d\n", dataset->num_images);
+    PRINT("", "Dataset num_original_images: %d\n", dataset->num_original_images);
     for (int i = 0; i < dataset-> num_images; i++) {
         PRINT("", "\tImage %d: %s\n", i + 1, dataset->original_images[i]->filename);
         PRINT("", "grey 0, 0: %d\n", get_pixel(dataset->original_images[i], 0, 0, 0));
