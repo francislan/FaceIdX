@@ -16,7 +16,7 @@ do { \
 	} \
 } while(0)
 
-inline void print(level, fmt, ...) {
+inline void print(char *level, char *fmt, ...) {
 	if (!strcmp(level, "BUG")) {
 		printf(KRED, "[Error]: ");
 		printf(KRED, fmt, ##__VA_ARGS__);
