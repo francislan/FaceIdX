@@ -51,6 +51,54 @@ int main(int argc, char **argv)
 
     save_image_to_disk(average);
 
+////////////////GPU/////////////////
+
+
+	struct Dataset *d_dataset;
+	GPU_CHECKERROR(
+	cudaMalloc ((void**)&d_dataset, sizeof(struct Dataset))
+	);    
+	GPU_CHECKERROR(
+	cudaMemcpy ((void*) d_dataset,
+				(void*) dataset,
+				sizeof(struct Dataset),
+				cudaMemcpyHostToDevice)
+	);
+
+    struct Image *d_average;
+	GPU_CHECKERROR(
+	cudaMalloc ((void**)&d_average, sizeof(struct Image))
+	);    
+		
+	dim3 dimOfGrid(ceil(dataset->w*1.0/32), ceil(dataset->h*1.0/32), 1);
+	dim3 dimOfBlock(32, 32, 1);
+	compute_average_gpu <<< dimOfGrid, dimOfBlock >>> ( d_dataset, d_average );
+
+	GPU_CHECKERROR(
+	cudaMemcpy ((void*) average,
+				(void*) d_average,
+				sizeof(struct Image),
+				cudaMemcpyDeviceToHost)
+	);
+
+    cudaDeviceSynchronize();
+    if (average == NULL) {
+        PRINT("BUG","average computation failed\n");
+        return EXIT_FAILURE;
+    }
+    PRINT("", "grey 0, 0: %d\n", get_pixel(average, 0, 0, 0));
+    PRINT("", "grey 156, 15: %d\n", get_pixel(average, 156, 15, 0));
+
+    save_image_to_disk(average);
+
+	GPU_CHECKERROR(
+	cudaFree (d_average)
+	);
+
+	GPU_CHECKERROR(
+	cudaFree (d_dataset)
+	);
+
     free_dataset(dataset);
     return EXIT_SUCCESS;
 }
