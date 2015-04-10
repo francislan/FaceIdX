@@ -55,11 +55,13 @@ void compute_average_gpu(struct Dataset * dataset, struct Image * average) {
     int n = dataset->num_original_images;
 
     if (w <= 0 || h <= 0) {
-        PRINT("WARN", "Dataset's width and/or height incorrect(s)\n");
+        //PRINT("WARN", "Dataset's width and/or height incorrect(s)\n");
+        printf("[Warning]: Dataset's width and/or height incorrect(s)\n");
         return;
     }
     if (n <= 0) {
-        PRINT("WARN", "No image in dataset\n");
+        //PRINT("WARN", "No image in dataset\n");
+        printf("[Warning]: No image in dataset\n");
         return;
     }
 

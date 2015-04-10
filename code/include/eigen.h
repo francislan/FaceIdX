@@ -19,20 +19,3 @@ struct Image * compute_average_cpu(struct Dataset * dataset);
 __global__ void compute_average_gpu(struct Dataset * dataset, struct Image * average);
 
 #endif
-
-
-// pixel_grey = get_pixel(images[0], 0, 2, 0);
-
-/*
-struct Image *images;
-// load images
-int num_images = 100;
-
-
-struct Image average;
-
-average = compute_average_gpu(images, num_images);
-
-save_average_to_dataset()
-
-*/
