@@ -38,7 +38,7 @@ struct Image * compute_average_cpu(struct Dataset * dataset) {
         for (int y = 0; y < h; y++) {
             int sum = 0;
             for (int i = 0; i < n; i++)
-                sum += get_pixel(dataset->original_images[i], x, y, 0);
+                sum += GET_PIXEL(dataset->original_images[i], x, y, 0);
             average->data[y * w + x + 0] = (sum / n);
         }
     }
@@ -71,7 +71,7 @@ void compute_average_gpu(struct Dataset * dataset, struct Image * average) {
 
     int sum = 0;
     for (int i = 0; i < n; i++)
-        sum += get_pixel(dataset->original_images[i], x, y, 0);
+        sum += GET_PIXEL(dataset->original_images[i], x, y, 0);
     average->data[y * w + x + 0] = (sum / n);
     return;
 }

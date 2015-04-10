@@ -23,8 +23,8 @@ int main(int argc, char **argv)
         PRINT("WARN", "file could not be loaded.\n");
     } else {
         PRINT("", "Image width: %d, height: %d, comp: %d\n", image->w, image->h, image->comp);
-        PRINT("", "grey: %d\n", get_pixel(image, 0, 0, 0));
-        PRINT("", "grey: %d\n", get_pixel(image, 156, 15, 0));
+        PRINT("", "grey: %d\n", GET_PIXEL(image, 0, 0, 0));
+        PRINT("", "grey: %d\n", GET_PIXEL(image, 156, 15, 0));
     }
     free_image(image);
 
@@ -38,16 +38,16 @@ int main(int argc, char **argv)
     PRINT("", "Dataset num_original_images: %d\n", dataset->num_original_images);
     for (int i = 0; i < dataset->num_original_images; i++) {
         PRINT("", "\tImage %d: %s\n", i + 1, dataset->original_images[i]->filename);
-        PRINT("", "grey 0, 0: %d\n", get_pixel(dataset->original_images[i], 0, 0, 0));
-        PRINT("", "grey 156, 15: %d\n", get_pixel(dataset->original_images[i], 156, 15, 0));
+        PRINT("", "grey 0, 0: %d\n", GET_PIXEL(dataset->original_images[i], 0, 0, 0));
+        PRINT("", "grey 156, 15: %d\n", GET_PIXEL(dataset->original_images[i], 156, 15, 0));
     }
     struct Image *average = compute_average_cpu(dataset);
     if (average == NULL) {
         PRINT("BUG","average computation failed\n");
         return EXIT_FAILURE;
     }
-    PRINT("", "grey 0, 0: %d\n", get_pixel(average, 0, 0, 0));
-    PRINT("", "grey 156, 15: %d\n", get_pixel(average, 156, 15, 0));
+    PRINT("", "grey 0, 0: %d\n", GET_PIXEL(average, 0, 0, 0));
+    PRINT("", "grey 156, 15: %d\n", GET_PIXEL(average, 156, 15, 0));
 
     save_image_to_disk(average);
 
@@ -86,8 +86,8 @@ int main(int argc, char **argv)
         PRINT("BUG","average computation failed\n");
         return EXIT_FAILURE;
     }
-    PRINT("", "grey 0, 0: %d\n", get_pixel(average, 0, 0, 0));
-    PRINT("", "grey 156, 15: %d\n", get_pixel(average, 156, 15, 0));
+    PRINT("", "grey 0, 0: %d\n", GET_PIXEL(average, 0, 0, 0));
+    PRINT("", "grey 156, 15: %d\n", GET_PIXEL(average, 156, 15, 0));
 
     save_image_to_disk(average);
 
