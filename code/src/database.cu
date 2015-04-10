@@ -27,12 +27,6 @@ void free_image(struct Image *image) {
     free(image);
 }
 
-// Assumes the image is loaded and x and y are correct coordinates
-unsigned char get_pixel(struct Image *image, int x, int y, int comp) {
-    return image->data[(y * image->w + x) * image->comp + comp];
-}
-
-
 struct Dataset * create_dataset(const char *directory, const char *dataset_path, const char *name) {
     char * line = NULL;
     size_t len = 0;

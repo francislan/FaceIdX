@@ -1,6 +1,12 @@
 #ifndef DATABASE_H
 #define DATABASE_H
 
+// Assumes the image is loaded and x and y are correct coordinates
+#define GET_PIXEL(image, x, y, comp) \
+do { \
+	(image)->data[((y) * (image)->w + (x)) * (image)->(comp) + (comp)]; \
+} while(0)
+
 struct Image {
 	unsigned char *data;
 	int w;
@@ -32,7 +38,6 @@ struct Dataset {
 
 struct Image * load_image(const char *filename, int req_comp);
 void free_image(struct Image *image);
-unsigned char get_pixel(struct Image *image, int x, int y, int comp);
 struct Dataset * create_dataset(const char *directory, const char *dataset_path, const char *name);
 void free_dataset(struct Dataset *dataset);
 void save_image_to_disk(struct Image *image);
