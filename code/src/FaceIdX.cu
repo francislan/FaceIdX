@@ -72,7 +72,7 @@ int main(int argc, char **argv)
 
     dim3 dimOfGrid(ceil(dataset->w * 1.0 / 32), ceil(dataset->h * 1.0 / 32), 1);
     dim3 dimOfBlock(32, 32, 1);
-    compute_average_gpu<<<dimOfGrid, dimOfBlock>>>(d_dataset, d_average);
+    compute_average_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_dataset, d_average);
 
     GPU_CHECKERROR(
     cudaMemcpy((void*) average,
