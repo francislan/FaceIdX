@@ -49,7 +49,7 @@ int main(int argc, char **argv)
     PRINT("", "grey 0, 0: %d\n", GET_PIXEL(average, 0, 0, 0));
     PRINT("", "grey 156, 15: %d\n", GET_PIXEL(average, 156, 15, 0));
 
-    save_image_to_disk(average);
+    save_image_to_disk(average, "average_cpu.png");
 
 ////////////////GPU/////////////////
 
@@ -82,6 +82,7 @@ int main(int argc, char **argv)
     );
 
     cudaDeviceSynchronize();
+    // not working, has to find another way to test average
     if (average == NULL) {
         PRINT("BUG","average computation failed\n");
         return EXIT_FAILURE;
@@ -89,7 +90,7 @@ int main(int argc, char **argv)
     PRINT("", "grey 0, 0: %d\n", GET_PIXEL(average, 0, 0, 0));
     PRINT("", "grey 156, 15: %d\n", GET_PIXEL(average, 156, 15, 0));
 
-    save_image_to_disk(average);
+    save_image_to_disk(average, "average_gpu.png");
 
     GPU_CHECKERROR(
     cudaFree(d_average)

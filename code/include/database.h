@@ -38,7 +38,7 @@ struct Image * load_image(const char *filename, int req_comp);
 void free_image(struct Image *image);
 struct Dataset * create_dataset(const char *directory, const char *dataset_path, const char *name);
 void free_dataset(struct Dataset *dataset);
-void save_image_to_disk(struct Image *image);
+void save_image_to_disk(struct Image *image, const char *name);
 
 struct Dataset * load_dataset(const char *dataset_path);
 int save_average_to_dataset(struct Dataset *dataset, struct Image *average);

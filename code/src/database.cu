@@ -120,6 +120,6 @@ void free_dataset(struct Dataset *dataset) {
     free(dataset);
 }
 
-void save_image_to_disk(struct Image *image) {
-    stbi_write_png("average.png", image->w, image->h, 1, image->data, 0);
+void save_image_to_disk(struct Image *image, const char *name) {
+    stbi_write_png(name, image->w, image->h, 1, image->data, 0);
 }

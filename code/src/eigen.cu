@@ -49,7 +49,7 @@ struct Image * compute_average_cpu(struct Dataset * dataset) {
 
 
 __global__
-void compute_average_gpu(struct Dataset * dataset, struct Image * average) {
+void compute_average_gpu_kernel(struct Dataset * dataset, struct Image * average) {
     int w = dataset->w;
     int h = dataset->h;
     int n = dataset->num_original_images;
