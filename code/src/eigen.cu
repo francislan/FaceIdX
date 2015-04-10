@@ -56,11 +56,11 @@ void compute_average_gpu(struct Dataset * dataset, struct Image * average) {
 
     if (w <= 0 || h <= 0) {
         PRINT("WARN", "Dataset's width and/or height incorrect(s)\n");
-        return NULL;
+        return;
     }
     if (n <= 0) {
         PRINT("WARN", "No image in dataset\n");
-        return NULL;
+        return;
     }
 
     int x = blockDim.x * blockIdx.x + threadIdx.x;
@@ -72,5 +72,4 @@ void compute_average_gpu(struct Dataset * dataset, struct Image * average) {
         sum += get_pixel(dataset->original_images[i], x, y, 0);
     average->data[y * w + x + 0] = (sum / n);
     return;
-
 }
