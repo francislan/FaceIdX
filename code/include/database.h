@@ -2,8 +2,8 @@
 #define DATABASE_H
 
 // Assumes the image is loaded and x and y are correct coordinates
-#define GET_PIXEL(image, x, y, comp) \
-	(image)->data[((y) * (image)->w + (x)) * (image)->(comp) + (comp)]
+#define GET_PIXEL(image, x, y, req_comp) \
+	(image)->data[((y) * (image)->w + (x)) * (image)->comp + (req_comp)]
 
 struct Image {
 	unsigned char *data;
