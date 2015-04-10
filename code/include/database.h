@@ -3,9 +3,7 @@
 
 // Assumes the image is loaded and x and y are correct coordinates
 #define GET_PIXEL(image, x, y, comp) \
-do { \
-	(image)->data[((y) * (image)->w + (x)) * (image)->(comp) + (comp)]; \
-} while(0)
+	(image)->data[((y) * (image)->w + (x)) * (image)->(comp) + (comp)]
 
 struct Image {
 	unsigned char *data;
