@@ -50,7 +50,7 @@ int main(int argc, char **argv)
     PRINT("", "grey 156, 15: %d\n", GET_PIXEL(average, 156, 15, 0));
 
     save_image_to_disk(average, "average_cpu.png");
-		printf("hello");
+	std::cout<<"hello"<<std::endl;
 
 
 
