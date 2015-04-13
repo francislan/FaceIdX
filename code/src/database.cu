@@ -95,6 +95,11 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
     }
     dataset->w = w;
     dataset->h = h;
+    dataset->num_eigenfaces = 0;
+    dataset->num_faces = 0;
+    dataset->average = NULL;
+    dataset->eigenfaces = NULL;
+    dataset->faces = NULL;
 
 end:
     fclose(fp);
@@ -105,6 +110,8 @@ end:
 }
 
 void free_dataset(struct Dataset *dataset) {
+    if (dataset == NULL)
+	return;
     for (int i = 0; i < dataset->num_original_images; i++)
 	free_image(dataset->original_images[i]);
     free(dataset->original_images);
@@ -113,10 +120,10 @@ void free_dataset(struct Dataset *dataset) {
 	free_image(dataset->eigenfaces[i]);
     free(dataset->eigenfaces);
 
-/*    for (int i = 0; i < dataset->num_faces; i++)
+    for (int i = 0; i < dataset->num_faces; i++)
 	free_face(dataset->faces[i]);
     free(dataset->faces);
-*/
+
     free_image(dataset->average);
     free(dataset);
 }

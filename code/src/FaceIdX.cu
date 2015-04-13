@@ -79,14 +79,13 @@ int main(int argc, char **argv)
     GPU_CHECKERROR(cudaEventElapsedTime(&time_for_gpu, start_gpu, end_gpu));
     fprintf(f, "Time taken for computing average face on gpu: %3.1f ms\n", time_for_gpu);
     // not working, has to find another way to test average
-    /*if (average_gpu == NULL) {
+    if (average_gpu == NULL) {
         PRINT("BUG","average computation failed\n");
         return EXIT_FAILURE;
     }
     PRINT("", "grey 0, 0: %d\n", GET_PIXEL(average_gpu, 0, 0, 0));
     PRINT("", "grey 156, 15: %d\n", GET_PIXEL(average_gpu, 156, 15, 0));
-    */
-printf("1\n");
+
     save_image_to_disk(average_gpu, "average_gpu.png");
 
     fclose(f);

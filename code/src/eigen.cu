@@ -124,7 +124,7 @@ struct Image * compute_average_gpu(struct Dataset * dataset) {
     cudaFree(d_images)
     );
     dataset->average = h_average;
-    printf("exiting compute_average_gpu()...\n");    
+    printf("exiting compute_average_gpu()...\n");
     return h_average;
 }
 
