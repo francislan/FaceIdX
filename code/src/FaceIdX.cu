@@ -18,18 +18,18 @@ int main(int argc, char **argv)
         return 0;
     }
 
-	cudaEvent_t start_cpu, end_cpu, start_gpu, end_gpu;
-	float time_for_cpu, time_for_gpu;
-	FILE *f = fopen("timer_log.txt", "w");
-	if( f == NULL )	{
-		printf("Error opening file!\n");
-		exit(1);
-	}
-	GPU_CHECKERROR( cudaEventCreate(&start_cpu) );
-	GPU_CHECKERROR( cudaEventCreate(&end_cpu) );
-	GPU_CHECKERROR( cudaEventCreate(&start_gpu) );
-	GPU_CHECKERROR( cudaEventCreate(&end_gpu) );
-	
+    cudaEvent_t start_cpu, end_cpu, start_gpu, end_gpu;
+    float time_for_cpu, time_for_gpu;
+    FILE *f = fopen("timer_log.txt", "w");
+    if(f == NULL) {
+        PRINT("BUG", "Error opening file!\n");
+        return EXIT_FAILURE;
+    }
+    GPU_CHECKERROR(cudaEventCreate(&start_cpu));
+    GPU_CHECKERROR(cudaEventCreate(&end_cpu));
+    GPU_CHECKERROR(cudaEventCreate(&start_gpu));
+    GPU_CHECKERROR(cudaEventCreate(&end_gpu));
+
     struct Image *image = load_image("../../Data/nottingham/normalized/f005a.png", 1);
     if (image->data == NULL) {
         PRINT("WARN", "file could not be loaded.\n");
@@ -56,12 +56,12 @@ int main(int argc, char **argv)
     }
 
 
-	GPU_CHECKERROR( cudaEventRecord(start_cpu,0) );
+    GPU_CHECKERROR(cudaEventRecord(start_cpu, 0));
     struct Image *average = compute_average_cpu(dataset);
-	GPU_CHECKERROR( cudaEventRecord(end_cpu,0) );
-	GPU_CHECKERROR( cudaEventSynchronize(end_cpu) );
-	GPU_CHECKERROR( cudaEventElapsedTime( &time_for_cpu, start_cpu, end_cpu) );
-	fprintf( f, "Time taken for computing average face on cpu: %3.1f ms\n", time_for_cpu);
+    GPU_CHECKERROR(cudaEventRecord(end_cpu, 0));
+    GPU_CHECKERROR(cudaEventSynchronize(end_cpu));
+    GPU_CHECKERROR(cudaEventElapsedTime(&time_for_cpu, start_cpu, end_cpu));
+    fprintf(f, "Time taken for computing average face on cpu: %3.1f ms\n", time_for_cpu);
     if (average == NULL) {
         PRINT("BUG","average computation failed\n");
         return EXIT_FAILURE;
@@ -69,16 +69,15 @@ int main(int argc, char **argv)
     PRINT("", "grey 0, 0: %d\n", GET_PIXEL(average, 0, 0, 0));
     PRINT("", "grey 156, 15: %d\n", GET_PIXEL(average, 156, 15, 0));
 
-	save_image_to_disk(average, "average_cpu.png");
+    save_image_to_disk(average, "average_cpu.png");
 
+    GPU_CHECKERROR(cudaEventRecord(start_gpu, 0));
+    struct Image *average_gpu = compute_average_gpu(dataset);
 
-	GPU_CHECKERROR( cudaEventRecord(start_gpu,0) );
-	struct Image *average_gpu = compute_average_gpu(dataset);
-
-	GPU_CHECKERROR( cudaEventRecord(end_gpu,0) );
-	GPU_CHECKERROR( cudaEventSynchronize(end_gpu) );
-	GPU_CHECKERROR( cudaEventElapsedTime( &time_for_gpu, start_gpu, end_gpu) );
-	fprintf( f, "Time taken for computing average face on gpu: %3.1f ms\n", time_for_gpu);
+    GPU_CHECKERROR(cudaEventRecord(end_gpu, 0));
+    GPU_CHECKERROR(cudaEventSynchronize(end_gpu));
+    GPU_CHECKERROR(cudaEventElapsedTime(&time_for_gpu, start_gpu, end_gpu));
+    fprintf(f, "Time taken for computing average face on gpu: %3.1f ms\n", time_for_gpu);
     // not working, has to find another way to test average
     /*if (average_gpu == NULL) {
         PRINT("BUG","average computation failed\n");
@@ -86,16 +85,15 @@ int main(int argc, char **argv)
     }
     PRINT("", "grey 0, 0: %d\n", GET_PIXEL(average_gpu, 0, 0, 0));
     PRINT("", "grey 156, 15: %d\n", GET_PIXEL(average_gpu, 156, 15, 0));
-	*/
+    */
 printf("1\n");
     save_image_to_disk(average_gpu, "average_gpu.png");
 
-
-	fclose(f);
+    fclose(f);
     free_dataset(dataset);
-	GPU_CHECKERROR( cudaEventDestroy(start_cpu) );
-	GPU_CHECKERROR( cudaEventDestroy(end_cpu) );
-	GPU_CHECKERROR( cudaEventDestroy(start_gpu) );
-	GPU_CHECKERROR( cudaEventDestroy(end_gpu) );
+    GPU_CHECKERROR(cudaEventDestroy(start_cpu));
+    GPU_CHECKERROR(cudaEventDestroy(end_cpu));
+    GPU_CHECKERROR(cudaEventDestroy(start_gpu));
+    GPU_CHECKERROR(cudaEventDestroy(end_gpu));
     return EXIT_SUCCESS;
 }

@@ -64,7 +64,7 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
 
     dataset = (struct Dataset *)malloc(sizeof(struct Dataset));
 
-		TEST_MALLOC(dataset);
+    TEST_MALLOC(dataset);
     dataset->name = name;
     dataset->path = dataset_path;
     dataset->num_original_images = num_images;
