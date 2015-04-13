@@ -27,6 +27,13 @@ void free_image(struct Image *image) {
     free(image);
 }
 
+void free_face(struct FaceCoordinates *face) {
+    if (face == NULL)
+	return;
+    free(face->coordinates);
+    free(face);
+}
+
 struct Dataset * create_dataset(const char *directory, const char *dataset_path, const char *name) {
     char * line = NULL;
     size_t len = 0;
