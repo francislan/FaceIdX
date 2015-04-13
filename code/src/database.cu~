@@ -63,7 +63,8 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
     fp = popen(command, "r"); // run the command twice, not optimal, and possible exploit
 
     dataset = (struct Dataset *)malloc(sizeof(struct Dataset));
-
+		//printf("size of struct Dataset= %lu\n", sizeof(struct Dataset));		
+		//printf("size of *dataset= %lu\n", sizeof(*dataset)); 
 		TEST_MALLOC(dataset);
     dataset->name = name;
     dataset->path = dataset_path;

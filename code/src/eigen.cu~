@@ -115,7 +115,7 @@ struct Image * compute_average_gpu(struct Dataset * dataset) {
 	h_average->h = h;
 	h_average->comp = 1;
 
-    //free(h_average_image);
+    free(h_average_image);
     GPU_CHECKERROR(
     cudaFree(d_average_image)
     );

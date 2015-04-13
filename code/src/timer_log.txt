@@ -1,0 +1,2 @@
+Time taken for computing average face on cpu: 15.2 ms
+Time taken for computing average face on gpu: 1.6 ms
