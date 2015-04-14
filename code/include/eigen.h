@@ -17,7 +17,8 @@ static void gpuCheckError(cudaError_t err,
 
 struct Image * compute_average_cpu(struct Dataset * dataset);
 struct Image * compute_average_gpu(struct Dataset * dataset);
-//__global__ void compute_average_gpu_kernel(struct Dataset * dataset, struct Image * average);
 __global__ void compute_average_gpu_kernel(unsigned char *images, int w, int h, int num_image, unsigned char * average);
 
+int compute_eigenfaces_cpu(struct Dataset * dataset);
+int compute_eigenfaces_gpu(struct Dataset * dataset);
 #endif

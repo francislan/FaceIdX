@@ -131,17 +131,14 @@ struct Image * compute_average_gpu(struct Dataset * dataset) {
 
 __global__
 void compute_average_gpu_kernel(unsigned char *images, int w, int h, int num_image, unsigned char *average){
-    //printf("entering kernel...\n");
     int x = blockDim.x * blockIdx.x + threadIdx.x;
     int y = blockDim.y * blockIdx.y + threadIdx.y;
     if(x >= w || y >= h)
         return;
-    //printf("000...\n");
     int sum = 0;
     for (int i = 0; i < num_image; i++)
         sum += images[i * w * h + y * w + x + 0];
     average[y * w + x + 0] = (sum / num_image);
-    //printf("exiting kernel...\n");
     return;
 }
 
