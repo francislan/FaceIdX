@@ -76,8 +76,7 @@ int main(int argc, char **argv)
     PRINT("INFO", "Start eigenfaces computation\n");
     compute_eigenfaces_cpu(dataset, 20);
     PRINT("INFO", "End eigenfaces computation\n");
-    for (int i = 0; i < dataset->num_eigenfaces; i++)
-    	save_image_to_disk(dataset->eigenfaces[i], dataset->eigenfaces[i]->filename);
+    save_eigenfaces_to_disk(dataset);
 
 
     GPU_CHECKERROR(cudaEventRecord(start_gpu, 0));

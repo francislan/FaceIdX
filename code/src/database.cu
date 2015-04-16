@@ -90,6 +90,7 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
         strcat(image_name, "/");
         strcat(image_name, line);
         dataset->original_images[i] = load_image(image_name, 1);
+	strcpy(dataset->original_images[i]->filename, line); // buffer overflow
         if (i == 0) {
             w = dataset->original_images[0]->w;
             h = dataset->original_images[0]->h;
@@ -129,7 +130,7 @@ void free_dataset(struct Dataset *dataset)
     free(dataset->original_images);
 
     for (int i = 0; i < dataset->num_eigenfaces; i++)
-	free_image(dataset->eigenfaces[i]);
+	free(dataset->eigenfaces[i]);
     free(dataset->eigenfaces);
 
     for (int i = 0; i < dataset->num_faces; i++)
@@ -143,4 +144,38 @@ void free_dataset(struct Dataset *dataset)
 void save_image_to_disk(struct Image *image, const char *name)
 {
     stbi_write_png(name, image->w, image->h, 1, image->data, 0);
+}
+
+void save_eigenfaces_to_disk(struct Dataset *dataset)
+{
+    int n = dataset->num_eigenfaces;
+    int w = dataset->w;
+    int h = dataset->h;
+    struct Image *image = (struct Image *)malloc(sizeof(struct Image));
+    TEST_MALLOC(image);
+    image->data = (unsigned char *)malloc(w * h * 1 * sizeof(unsigned char));
+    TEST_MALLOC(image->data);
+    image->w = w;
+    image->h = h;
+    image->comp = 1;
+
+    for (int i = 0 ; i < n; i++) {
+        float min = dataset->eigenfaces[i][0];
+        float max = dataset->eigenfaces[i][0];
+        for (int j = 1; j < w * h; j++) {
+            float current = dataset->eigenfaces[i][j];
+            if (current > max) {
+                max = current;
+            } else if (current < min) {
+                min = current;
+            }
+        }
+        sprintf(image->filename, "eigen/Eigenface %d.png", i);
+        for (int j = 0; j < w * h; j++)
+            image->data[j] = dataset->eigenfaces[i][j] > 0 ?
+                (unsigned char)((dataset->eigenfaces[i][j] / max) * 127 + 128) :
+                (unsigned char)(128 - (dataset->eigenfaces[i][j] / min) * 128);
+	save_image_to_disk(image, image->filename);
+    }
+    free_image(image);
 }

@@ -22,6 +22,7 @@ int dot_product_cpu(float *a, float *b, int size);
 void jacobi_cpu(float *a, int n, float *v, float *e);
 int comp_eigenvalues(const void *a, const void *b);
 int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep);
+void compute_weighs(struct Dataset *dataset);
 
 int compute_eigenfaces_gpu(struct Dataset * dataset, int num_to_keep);
 #endif

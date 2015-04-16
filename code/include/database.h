@@ -30,7 +30,7 @@ struct Dataset {
 	int h;
 	struct Image **original_images; //malloc
 	struct Image *average;
-	struct Image **eigenfaces; //malloc
+	float **eigenfaces; //malloc
 	struct FaceCoordinates **faces; //malloc
 };
 
@@ -40,6 +40,7 @@ void free_face(struct FaceCoordinates *face);
 struct Dataset * create_dataset(const char *directory, const char *dataset_path, const char *name);
 void free_dataset(struct Dataset *dataset);
 void save_image_to_disk(struct Image *image, const char *name);
+void save_eigenfaces_to_disk(struct Dataset *dataset);
 
 struct Dataset * load_dataset(const char *dataset_path);
 int save_average_to_dataset(struct Dataset *dataset, struct Image *average);

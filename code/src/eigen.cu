@@ -310,52 +310,29 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
         PRINT("DEBUG", "Eigenvalue #%d (index %d): %f\n", i, (int)eigenvalues[2 * i + 1], eigenvalues[2 * i]);
 
     // Convert size n*n eigenfaces to size w*h
-    float *eigenfaces_good = (float *)malloc(num_to_keep * w * h * sizeof(float));
-    TEST_MALLOC(eigenfaces_good);
+    dataset->num_eigenfaces = num_to_keep;
+    dataset->eigenfaces = (float **)malloc(num_to_keep * sizeof(float *));
+    TEST_MALLOC(dataset->eigenfaces);
+    for (int i = 0; i < num_to_keep; i++) {
+        dataset->eigenfaces[i] = (float *)malloc(w * h * sizeof(float));
+        TEST_MALLOC(dataset->eigenfaces[i]);
+    }
+    float sqrt_n = sqrt(n);
     for (int i = 0; i < num_to_keep; i++) {
         int index = (int)eigenvalues[2 * i + 1];
         for (int j = 0; j < w * h; j++) {
             float temp = 0;
             for (int k = 0; k < n; k++)
                 temp += images_minus_average[k][j] * eigenfaces[k * n + index];
-            eigenfaces_good[j * num_to_keep + i] = temp / sqrt(n);
+            dataset->eigenfaces[i][j] = temp / sqrt_n;
         }
     }
     PRINT("DEBUG", "Transforming eigenfaces... done\n");
 
-    // Convert eigenfaces to struct Image
-    dataset->eigenfaces = (struct Image **)malloc(num_to_keep * sizeof(struct Image *));
-    TEST_MALLOC(dataset->eigenfaces);
-    for (int i = 0; i < num_to_keep; i++) {
-        dataset->eigenfaces[i] = (struct Image *)malloc(sizeof(struct Image));
-        TEST_MALLOC(dataset->eigenfaces[i]);
-    }
-    dataset->num_eigenfaces = num_to_keep;
-
-    for (int i = 0 ; i < num_to_keep; i++) {
-        float min = eigenfaces_good[0 * num_to_keep + i];
-        float max = eigenfaces_good[0 * num_to_keep + i];
-        for (int j = 1; j < w * h; j++) {
-            float current = eigenfaces_good[j * num_to_keep + i];
-            if (current > max) {
-                max = current;
-            } else if (current < min) {
-                min = current;
-            }
-        }
-        struct Image *current_eigenface = dataset->eigenfaces[i];
-        current_eigenface->w = w;
-        current_eigenface->h = h;
-        current_eigenface->comp = 1;
-        current_eigenface->req_comp = 1;
-        sprintf(current_eigenface->filename, "eigen/Eigenface %d.png", i);
-        current_eigenface->data = (unsigned char *)malloc(w * h * 1 * sizeof(unsigned char));
-        TEST_MALLOC(current_eigenface->data);
-
-        for (int j = 0; j < w * h; j++)
-            current_eigenface->data[j] = eigenfaces_good[j * num_to_keep + i] > 0 ?
-                (unsigned char)((eigenfaces_good[j * num_to_keep + i] / max) * 127 + 128) :
-                (unsigned char)(128 - (eigenfaces_good[j * num_to_keep + i] / min) * 128);
-    }
     return 0;
+}
+
+void compute_weighs(struct Dataset *dataset)
+{
+    
 }
