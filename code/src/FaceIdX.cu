@@ -71,6 +71,14 @@ int main(int argc, char **argv)
 
     save_image_to_disk(average, "average_cpu.png");
 
+    // Eigenfaces
+    PRINT("INFO", "Start eigenfaces computation\n");
+    compute_eigenfaces_cpu(dataset);
+    PRINT("INFO", "End eigenfaces computation\n");
+    for (int i = 0; i < dataset->num_eigenfaces; i++)
+    	save_image_to_disk(dataset->eigenfaces[i], dataset->eigenfaces[i]->filename);
+
+
     GPU_CHECKERROR(cudaEventRecord(start_gpu, 0));
     struct Image *average_gpu = compute_average_gpu(dataset);
 

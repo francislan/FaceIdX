@@ -2,3 +2,5 @@
 *.cu~
 *.h~
 *.o
+Eigenface*.png
+Minus*.png

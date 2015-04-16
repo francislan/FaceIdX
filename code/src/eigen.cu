@@ -11,7 +11,8 @@
 #define THREADS_PER_BLOCK 256
 
 // returns NULL if error, otherwise returns pointer to average
-struct Image * compute_average_cpu(struct Dataset * dataset) {
+struct Image * compute_average_cpu(struct Dataset * dataset)
+{
     int w = dataset->w;
     int h = dataset->h;
     int n = dataset->num_original_images;
@@ -47,7 +48,8 @@ struct Image * compute_average_cpu(struct Dataset * dataset) {
 }
 
 
-struct Image * compute_average_gpu(struct Dataset * dataset) {
+struct Image * compute_average_gpu(struct Dataset * dataset)
+{
     int w = dataset->w;
     int h = dataset->h;
     int n = dataset->num_original_images;
@@ -130,7 +132,8 @@ struct Image * compute_average_gpu(struct Dataset * dataset) {
 
 
 __global__
-void compute_average_gpu_kernel(unsigned char *images, int w, int h, int num_image, unsigned char *average){
+void compute_average_gpu_kernel(unsigned char *images, int w, int h, int num_image, unsigned char *average)
+{
     int x = blockDim.x * blockIdx.x + threadIdx.x;
     int y = blockDim.y * blockIdx.y + threadIdx.y;
     if(x >= w || y >= h)
@@ -142,4 +145,201 @@ void compute_average_gpu_kernel(unsigned char *images, int w, int h, int num_ima
     return;
 }
 
+int dot_product_cpu(float *a, float *b, int size)
+{
+    float sum = 0;
+    for (int i = 0; i < size; i++)
+        sum += a[i] * b[i];
 
+    return sum;
+}
+
+// Expect v to be initialized to 0
+void jacobi_cpu(float *a, int n, float *v, float *e)
+{
+    int i, j, p, q, flag, t = 0;
+    float temp;
+    float theta, zero = 1e-4, max, pi = 3.141592654, c, s;
+
+    for(i = 0; i < n; i++)
+        v[i * n + i] = 1;
+
+    while(1) {
+        flag = 0;
+        p = 0;
+        q = 1;
+        max = fabs(a[0 * n + 1]);
+        for(i = 0; i < n; i++)
+            for(j = i + 1; j < n; j++) {
+                temp = fabs(a[i * n + j]);
+                if (temp > zero) {
+                    flag = 1;
+                    if (temp > max) {
+                        max = temp;
+                        p = i;
+                        q = j;
+                    }
+                }
+            }
+        if (!flag)
+            break;
+        t++;
+        if(a[p * n + p] == a[q * n + q]) {
+            if(a[p * n + q] > 0)
+                theta = pi/4;
+            else
+                theta = -pi/4;
+        } else {
+            theta = 0.5 * atan(2 * a[p * n + q] / (a[p * n + p] - a[q * n + q]));
+        }
+        c = cos(theta);
+        s = sin(theta);
+
+        for(i = 0; i < n; i++) {
+            temp = c * a[p * n + i] + s * a[q * n + i];
+            a[q * n + i] = -s * a[p * n + i] + c * a[q * n + i];
+            a[p * n + i] = temp;
+        }
+
+        for(i = 0; i < n; i++) {
+            temp = c * a[i * n  + p] + s * a[i * n + q];
+            a[i * n + q] = -s * a[i * n + p] + c * a[i * n + q];
+            a[i * n + p] = temp;
+        }
+
+        for(i = 0; i < n; i++) {
+            temp = c * v[i * n + p] + s * v[i * n + q];
+            v[i * n + q] = -s * v[i * n + p] + c * v[i * n + q];
+            v[i * n + p] = temp;
+        }
+
+    }
+
+    printf("Nb of iterations: %d\n", t);
+    printf("The eigenvalues are \n");
+    for(i = 0; i < n; i++)
+        printf("%8.5f ", a[i * n + i]);
+
+    printf("\nThe corresponding eigenvectors are \n");
+    for(j = 0; j < n; j++) {
+        for(i = 0; i < n; i++)
+            printf("% 8.5f,",v[i * n + j]);
+        printf("\n");
+    }
+    for (i = 0; i < n; i++)
+        e[i] = a[i * n + i];
+}
+
+int compute_eigenfaces_cpu(struct Dataset * dataset)
+{
+    int n = dataset->num_original_images;
+    int w = dataset->w;
+    int h = dataset->h;
+
+    float **images_minus_average = (float **)malloc(n * sizeof(float *));
+    TEST_MALLOC(images_minus_average);
+
+    for (int i = 0; i < n; i++) {
+        images_minus_average[i] = (float *)malloc(w * h * sizeof(float));
+        TEST_MALLOC(images_minus_average[i]);
+    }
+
+    // Test minus average
+/*
+    struct Image *minus_average = (struct Image *)malloc(sizeof(struct Image));
+    TEST_MALLOC(minus_average);
+    minus_average->w = w;
+    minus_average->h = h;
+    minus_average->comp = 1;
+    minus_average->req_comp = 1;
+*/
+    // Substract average to images
+    struct Image *average = dataset->average;
+    for (int i = 0; i < n; i++) {
+        struct Image *current_image = dataset->original_images[i];
+        // Maybe switching the 2 loops results in faster computation
+        for (int x = 0; x < w; x++)
+            for (int y = 0; y < h; y++)
+                images_minus_average[i][y * w + x] = (float)GET_PIXEL(current_image, x, y, 0) - GET_PIXEL(average, x, y, 0);
+/*        sprintf(minus_average->filename, "minus/Minus Average %d.png", i);
+        minus_average->data = (unsigned char *)malloc(w * h * 1 * sizeof(unsigned char));
+        for (int j = 0; j < w * h; j++)
+            minus_average->data[j] = images_minus_average[i][j] > 0 ?
+                (unsigned char)((images_minus_average[i][j] / 256) * 127 + 128) :
+                (unsigned char)(128 - (images_minus_average[i][j] / -256) * 128);
+        save_image_to_disk(minus_average, minus_average->filename);
+        free(minus_average->data);
+*/    }
+    PRINT("DEBUG", "Substracting average to images... done\n");
+
+    // Construct the Covariance Matrix
+    float *covariance_matrix = (float *)malloc(n * n * sizeof(float));
+    TEST_MALLOC(covariance_matrix);
+
+    for (int i = 0; i < n; i++) {
+        covariance_matrix[i * n + i] = dot_product_cpu(images_minus_average[i], images_minus_average[i], n) / n;
+        for (int j = i + 1; j < n; j++) {
+            covariance_matrix[i * n + j] = dot_product_cpu(images_minus_average[i], images_minus_average[j], n) / n;
+            covariance_matrix[j * n + i] = covariance_matrix[i * n + j];
+        }
+    }
+    PRINT("DEBUG", "Building covariance matrix... done\n");
+
+    // Compute eigenfaces
+    float *eigenfaces = (float *)calloc(n * n, sizeof(float));
+    TEST_MALLOC(eigenfaces);
+    float *eigenvalues = (float *)malloc(n * sizeof(float));
+    TEST_MALLOC(eigenvalues);
+    jacobi_cpu(covariance_matrix, n, eigenfaces, eigenvalues);
+    PRINT("DEBUG", "Computing eigenfaces... done\n");
+
+    // Convert size n*n eigenfaces to size w*h
+    float *eigenfaces_good = (float *)malloc(n * w * h * sizeof(float));
+    TEST_MALLOC(eigenfaces_good);
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < w * h; j++) {
+            float temp = 0;
+            for (int k = 0; k < n; k++)
+                temp += images_minus_average[k][j] * eigenfaces[k * n + i];
+            eigenfaces_good[j * n + i] = temp / sqrt(n);
+        }
+    PRINT("DEBUG", "Transforming eigenfaces... done\n");
+
+    // Convert eigenfaces to struct Image
+    dataset->eigenfaces = (struct Image **)malloc(n * sizeof(struct Image *));
+    TEST_MALLOC(dataset->eigenfaces);
+    for (int i = 0; i < n; i++) {
+        dataset->eigenfaces[i] = (struct Image *)malloc(sizeof(struct Image));
+        TEST_MALLOC(dataset->eigenfaces[i]);
+    }
+    dataset->num_eigenfaces = n;
+
+    for (int i = 0 ; i < n; i++) {
+        float min = eigenfaces_good[0 * n + i];
+        float max = eigenfaces_good[0 * n + i];
+        for (int j = 1; j < w * h; j++) {
+            float current = eigenfaces_good[j * n + i];
+            if (current > max) {
+                max = current;
+            } else if (current < min) {
+                min = current;
+            }
+        }
+        struct Image *current_eigenface = dataset->eigenfaces[i];
+        current_eigenface->w = w;
+        current_eigenface->h = h;
+        current_eigenface->comp = 1;
+        current_eigenface->req_comp = 1;
+        sprintf(current_eigenface->filename, "eigen/Eigenface %d.png", i);
+        current_eigenface->data = (unsigned char *)malloc(w * h * 1 * sizeof(unsigned char));
+        TEST_MALLOC(current_eigenface->data);
+
+        for (int j = 0; j < w * h; j++)
+            current_eigenface->data[j] = eigenfaces_good[j * n + i] > 0 ?
+                (unsigned char)((eigenfaces_good[j * n + i] / max) * 127 + 128) :
+                (unsigned char)(128 - (eigenfaces_good[j * n + i] / min) * 128);
+
+    }
+
+    return 0;
+}
