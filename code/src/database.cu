@@ -11,7 +11,8 @@
 #include "stb_image_write.h"
 
 // User has to call free_image
-struct Image * load_image(const char *filename, int req_comp) {
+struct Image * load_image(const char *filename, int req_comp)
+{
     struct Image *image = (struct Image *)malloc(sizeof(struct Image));
     TEST_MALLOC(image);
     image->data = stbi_load(filename, &(image->w), &(image->h), &(image->comp), req_comp);
@@ -20,21 +21,24 @@ struct Image * load_image(const char *filename, int req_comp) {
     return image;
 }
 
-void free_image(struct Image *image) {
+void free_image(struct Image *image)
+{
     if (image == NULL)
 	return;
     stbi_image_free(image->data);
     free(image);
 }
 
-void free_face(struct FaceCoordinates *face) {
+void free_face(struct FaceCoordinates *face)
+{
     if (face == NULL)
 	return;
     free(face->coordinates);
     free(face);
 }
 
-struct Dataset * create_dataset(const char *directory, const char *dataset_path, const char *name) {
+struct Dataset * create_dataset(const char *directory, const char *dataset_path, const char *name)
+{
     char * line = NULL;
     size_t len = 0;
     int num_images = 0;
@@ -116,7 +120,8 @@ end:
     return dataset;
 }
 
-void free_dataset(struct Dataset *dataset) {
+void free_dataset(struct Dataset *dataset)
+{
     if (dataset == NULL)
 	return;
     for (int i = 0; i < dataset->num_original_images; i++)
@@ -135,6 +140,7 @@ void free_dataset(struct Dataset *dataset) {
     free(dataset);
 }
 
-void save_image_to_disk(struct Image *image, const char *name) {
+void save_image_to_disk(struct Image *image, const char *name)
+{
     stbi_write_png(name, image->w, image->h, 1, image->data, 0);
 }

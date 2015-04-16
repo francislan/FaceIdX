@@ -157,11 +157,11 @@ int dot_product_cpu(float *a, float *b, int size)
 // Expect v to be initialized to 0
 void jacobi_cpu(float *a, int n, float *v, float *e)
 {
-    int i, j, p, q, flag, t = 0;
+    int p, q, flag, t = 0;
     float temp;
     float theta, zero = 1e-4, max, pi = 3.141592654, c, s;
 
-    for(i = 0; i < n; i++)
+    for(int i = 0; i < n; i++)
         v[i * n + i] = 1;
 
     while(1) {
@@ -169,8 +169,8 @@ void jacobi_cpu(float *a, int n, float *v, float *e)
         p = 0;
         q = 1;
         max = fabs(a[0 * n + 1]);
-        for(i = 0; i < n; i++)
-            for(j = i + 1; j < n; j++) {
+        for(int i = 0; i < n; i++)
+            for(int j = i + 1; j < n; j++) {
                 temp = fabs(a[i * n + j]);
                 if (temp > zero) {
                     flag = 1;
@@ -195,42 +195,50 @@ void jacobi_cpu(float *a, int n, float *v, float *e)
         c = cos(theta);
         s = sin(theta);
 
-        for(i = 0; i < n; i++) {
+        for(int i = 0; i < n; i++) {
             temp = c * a[p * n + i] + s * a[q * n + i];
             a[q * n + i] = -s * a[p * n + i] + c * a[q * n + i];
             a[p * n + i] = temp;
         }
 
-        for(i = 0; i < n; i++) {
+        for(int i = 0; i < n; i++) {
             temp = c * a[i * n  + p] + s * a[i * n + q];
             a[i * n + q] = -s * a[i * n + p] + c * a[i * n + q];
             a[i * n + p] = temp;
         }
 
-        for(i = 0; i < n; i++) {
+        for(int i = 0; i < n; i++) {
             temp = c * v[i * n + p] + s * v[i * n + q];
             v[i * n + q] = -s * v[i * n + p] + c * v[i * n + q];
             v[i * n + p] = temp;
         }
 
     }
-
+/*
     printf("Nb of iterations: %d\n", t);
     printf("The eigenvalues are \n");
-    for(i = 0; i < n; i++)
+    for(int i = 0; i < n; i++)
         printf("%8.5f ", a[i * n + i]);
 
     printf("\nThe corresponding eigenvectors are \n");
-    for(j = 0; j < n; j++) {
-        for(i = 0; i < n; i++)
+    for(int j = 0; j < n; j++) {
+        for(int i = 0; i < n; i++)
             printf("% 8.5f,",v[i * n + j]);
         printf("\n");
+    }*/
+    for (int i = 0; i < n; i++) {
+        e[2 * i + 0] = a[i * n + i];
+        e[2 * i + 1] = i;
     }
-    for (i = 0; i < n; i++)
-        e[i] = a[i * n + i];
 }
 
-int compute_eigenfaces_cpu(struct Dataset * dataset)
+// Sorts in place the eigenvalues in descending order
+int comp_eigenvalues(const void *a, const void *b)
+{
+    return (fabs(*(float *)a) < fabs(*(float *)b)) - (fabs(*(float *)a) > fabs(*(float *)b));
+}
+
+int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
 {
     int n = dataset->num_original_images;
     int w = dataset->w;
@@ -288,37 +296,47 @@ int compute_eigenfaces_cpu(struct Dataset * dataset)
     // Compute eigenfaces
     float *eigenfaces = (float *)calloc(n * n, sizeof(float));
     TEST_MALLOC(eigenfaces);
-    float *eigenvalues = (float *)malloc(n * sizeof(float));
+    // eigenvalues stores couple (ev, index), makes it easier to get the top K
+    // later
+    float *eigenvalues = (float *)malloc(2 * n * sizeof(float));
     TEST_MALLOC(eigenvalues);
     jacobi_cpu(covariance_matrix, n, eigenfaces, eigenvalues);
     PRINT("DEBUG", "Computing eigenfaces... done\n");
 
-    // Convert size n*n eigenfaces to size w*h
-    float *eigenfaces_good = (float *)malloc(n * w * h * sizeof(float));
-    TEST_MALLOC(eigenfaces_good);
+    // Keep only top num_to_keep eigenfaces.
+    // Assumes num_to_keep is in the correct range.
+    qsort(eigenvalues, n, 2 * sizeof(float), comp_eigenvalues);
     for (int i = 0; i < n; i++)
+        PRINT("DEBUG", "Eigenvalue #%d (index %d): %f\n", i, (int)eigenvalues[2 * i + 1], eigenvalues[2 * i]);
+
+    // Convert size n*n eigenfaces to size w*h
+    float *eigenfaces_good = (float *)malloc(num_to_keep * w * h * sizeof(float));
+    TEST_MALLOC(eigenfaces_good);
+    for (int i = 0; i < num_to_keep; i++) {
+        int index = (int)eigenvalues[2 * i + 1];
         for (int j = 0; j < w * h; j++) {
             float temp = 0;
             for (int k = 0; k < n; k++)
-                temp += images_minus_average[k][j] * eigenfaces[k * n + i];
-            eigenfaces_good[j * n + i] = temp / sqrt(n);
+                temp += images_minus_average[k][j] * eigenfaces[k * n + index];
+            eigenfaces_good[j * num_to_keep + i] = temp / sqrt(n);
         }
+    }
     PRINT("DEBUG", "Transforming eigenfaces... done\n");
 
     // Convert eigenfaces to struct Image
-    dataset->eigenfaces = (struct Image **)malloc(n * sizeof(struct Image *));
+    dataset->eigenfaces = (struct Image **)malloc(num_to_keep * sizeof(struct Image *));
     TEST_MALLOC(dataset->eigenfaces);
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < num_to_keep; i++) {
         dataset->eigenfaces[i] = (struct Image *)malloc(sizeof(struct Image));
         TEST_MALLOC(dataset->eigenfaces[i]);
     }
-    dataset->num_eigenfaces = n;
+    dataset->num_eigenfaces = num_to_keep;
 
-    for (int i = 0 ; i < n; i++) {
-        float min = eigenfaces_good[0 * n + i];
-        float max = eigenfaces_good[0 * n + i];
+    for (int i = 0 ; i < num_to_keep; i++) {
+        float min = eigenfaces_good[0 * num_to_keep + i];
+        float max = eigenfaces_good[0 * num_to_keep + i];
         for (int j = 1; j < w * h; j++) {
-            float current = eigenfaces_good[j * n + i];
+            float current = eigenfaces_good[j * num_to_keep + i];
             if (current > max) {
                 max = current;
             } else if (current < min) {
@@ -335,11 +353,9 @@ int compute_eigenfaces_cpu(struct Dataset * dataset)
         TEST_MALLOC(current_eigenface->data);
 
         for (int j = 0; j < w * h; j++)
-            current_eigenface->data[j] = eigenfaces_good[j * n + i] > 0 ?
-                (unsigned char)((eigenfaces_good[j * n + i] / max) * 127 + 128) :
-                (unsigned char)(128 - (eigenfaces_good[j * n + i] / min) * 128);
-
+            current_eigenface->data[j] = eigenfaces_good[j * num_to_keep + i] > 0 ?
+                (unsigned char)((eigenfaces_good[j * num_to_keep + i] / max) * 127 + 128) :
+                (unsigned char)(128 - (eigenfaces_good[j * num_to_keep + i] / min) * 128);
     }
-
     return 0;
 }

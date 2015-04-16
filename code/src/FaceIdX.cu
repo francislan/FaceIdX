@@ -48,12 +48,13 @@ int main(int argc, char **argv)
     PRINT("", "Dataset name: %s\n", dataset->name);
     PRINT("", "Dataset path: %s\n", dataset->path);
     PRINT("", "Dataset num_original_images: %d\n", dataset->num_original_images);
-
+/*
     for (int i = 0; i < dataset->num_original_images; i++) {
         PRINT("", "\tImage %d: %s\n", i + 1, dataset->original_images[i]->filename);
         PRINT("", "grey 0, 0: %d\n", GET_PIXEL(dataset->original_images[i], 0, 0, 0));
         PRINT("", "grey 156, 15: %d\n", GET_PIXEL(dataset->original_images[i], 156, 15, 0));
-    }
+        X
+    }*/
 
 
     GPU_CHECKERROR(cudaEventRecord(start_cpu, 0));
@@ -66,14 +67,14 @@ int main(int argc, char **argv)
         PRINT("BUG","average computation failed\n");
         return EXIT_FAILURE;
     }
-    PRINT("", "grey 0, 0: %d\n", GET_PIXEL(average, 0, 0, 0));
-    PRINT("", "grey 156, 15: %d\n", GET_PIXEL(average, 156, 15, 0));
+    //PRINT("", "grey 0, 0: %d\n", GET_PIXEL(average, 0, 0, 0));
+    //PRINT("", "grey 156, 15: %d\n", GET_PIXEL(average, 156, 15, 0));
 
     save_image_to_disk(average, "average_cpu.png");
 
     // Eigenfaces
     PRINT("INFO", "Start eigenfaces computation\n");
-    compute_eigenfaces_cpu(dataset);
+    compute_eigenfaces_cpu(dataset, 20);
     PRINT("INFO", "End eigenfaces computation\n");
     for (int i = 0; i < dataset->num_eigenfaces; i++)
     	save_image_to_disk(dataset->eigenfaces[i], dataset->eigenfaces[i]->filename);
@@ -91,8 +92,8 @@ int main(int argc, char **argv)
         PRINT("BUG","average computation failed\n");
         return EXIT_FAILURE;
     }
-    PRINT("", "grey 0, 0: %d\n", GET_PIXEL(average_gpu, 0, 0, 0));
-    PRINT("", "grey 156, 15: %d\n", GET_PIXEL(average_gpu, 156, 15, 0));
+    //PRINT("", "grey 0, 0: %d\n", GET_PIXEL(average_gpu, 0, 0, 0));
+    //PRINT("", "grey 156, 15: %d\n", GET_PIXEL(average_gpu, 156, 15, 0));
 
     save_image_to_disk(average_gpu, "average_gpu.png");
 
