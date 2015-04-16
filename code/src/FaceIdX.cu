@@ -77,6 +77,14 @@ int main(int argc, char **argv)
     compute_eigenfaces_cpu(dataset, 20);
     PRINT("INFO", "End eigenfaces computation\n");
     save_eigenfaces_to_disk(dataset);
+    PRINT("INFO", "Start coordinates computation\n");
+    compute_weighs_cpu(dataset);
+    PRINT("INFO", "End coordinates computation\n");
+    PRINT("INFO", "Start reconstruction\n");
+    for (int i = 0; i < dataset->num_original_images; i++)
+        save_reconstructed_face_to_disk(dataset, dataset->faces[i], 20);
+    PRINT("INFO", "End reconstruction\n");
+
 
 
     GPU_CHECKERROR(cudaEventRecord(start_gpu, 0));

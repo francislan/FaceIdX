@@ -18,6 +18,7 @@ struct Image * load_image(const char *filename, int req_comp)
     image->data = stbi_load(filename, &(image->w), &(image->h), &(image->comp), req_comp);
     strcpy(image->filename, filename); // buffer overflow
     image->req_comp = req_comp;
+    image->minus_average = NULL;
     return image;
 }
 
@@ -26,6 +27,8 @@ void free_image(struct Image *image)
     if (image == NULL)
 	return;
     stbi_image_free(image->data);
+    if (image->minus_average != NULL)
+	    free(image->minus_average);
     free(image);
 }
 
@@ -158,6 +161,7 @@ void save_eigenfaces_to_disk(struct Dataset *dataset)
     image->w = w;
     image->h = h;
     image->comp = 1;
+    image->minus_average = NULL;
 
     for (int i = 0 ; i < n; i++) {
         float min = dataset->eigenfaces[i][0];
@@ -177,5 +181,49 @@ void save_eigenfaces_to_disk(struct Dataset *dataset)
                 (unsigned char)(128 - (dataset->eigenfaces[i][j] / min) * 128);
 	save_image_to_disk(image, image->filename);
     }
+    free_image(image);
+}
+
+
+void save_reconstructed_face_to_disk(struct Dataset *dataset, struct FaceCoordinates *face, int num_eigenfaces)
+{
+    struct Image *image = (struct Image *)malloc(sizeof(struct Image));
+    TEST_MALLOC(image);
+    image->w = dataset->w;
+    image->h = dataset->h;
+    image->comp = 1;
+    image->req_comp = 1;
+    image->minus_average = (float *)calloc(image->w * image->h, sizeof(float));
+    TEST_MALLOC(image->minus_average);
+    image->data = (unsigned char *)malloc(image->w * image->h * sizeof(unsigned char));
+    TEST_MALLOC(image->data);
+
+    int n = num_eigenfaces > face->num_eigenfaces ? face->num_eigenfaces : num_eigenfaces;
+    for (int i = 0; i < n; i++) {
+        float weight = face->coordinates[i];
+        for (int j = 0; j < image->w * image->h; j++)
+            image->minus_average[j] += weight * dataset->eigenfaces[i][j];
+    }
+
+    for (int j = 0; j < image->w * image->h; j++)
+        image->minus_average[j] += dataset->average->data[j];
+
+
+    float min = image->minus_average[0];
+    float max = image->minus_average[0];
+    for (int j = 1; j < image->w * image->h; j++) {
+        float current = image->minus_average[j];
+        if (current > max) {
+            max = current;
+        } else if (current < min) {
+            min = current;
+        }
+    }
+
+    for (int j = 0; j < image->w * image->h; j++)
+        image->data[j] = (unsigned char)((image->minus_average[j] - min) / (max - min) * 255);
+
+    sprintf(image->filename, "reconstructed/%s_with_%d.png", face->name, n);
+    save_image_to_disk(image, image->filename);
     free_image(image);
 }

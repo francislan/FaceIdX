@@ -34,6 +34,7 @@ struct Image * compute_average_cpu(struct Dataset * dataset)
     average->w = w;
     average->h = h;
     average->comp = 1;
+    average->minus_average = NULL;
 
     for (int x = 0; x < w; x++) {
         for (int y = 0; y < h; y++) {
@@ -118,6 +119,7 @@ struct Image * compute_average_gpu(struct Dataset * dataset)
     h_average->w = w;
     h_average->h = h;
     h_average->comp = 1;
+    h_average->minus_average = NULL;
 
     GPU_CHECKERROR(
     cudaFree(d_average_image)
@@ -145,7 +147,7 @@ void compute_average_gpu_kernel(unsigned char *images, int w, int h, int num_ima
     return;
 }
 
-int dot_product_cpu(float *a, float *b, int size)
+float dot_product_cpu(float *a, float *b, int size)
 {
     float sum = 0;
     for (int i = 0; i < size; i++)
@@ -248,8 +250,9 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
     TEST_MALLOC(images_minus_average);
 
     for (int i = 0; i < n; i++) {
-        images_minus_average[i] = (float *)malloc(w * h * sizeof(float));
-        TEST_MALLOC(images_minus_average[i]);
+        dataset->original_images[i]->minus_average = (float *)malloc(w * h * sizeof(float));
+        TEST_MALLOC(dataset->original_images[i]->minus_average);
+        images_minus_average[i] = dataset->original_images[i]->minus_average;
     }
 
     // Test minus average
@@ -260,6 +263,7 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
     minus_average->h = h;
     minus_average->comp = 1;
     minus_average->req_comp = 1;
+    minus_average->minus_average = NULL;
 */
     // Substract average to images
     struct Image *average = dataset->average;
@@ -329,10 +333,58 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
     }
     PRINT("DEBUG", "Transforming eigenfaces... done\n");
 
+    free(covariance_matrix);
+    free(eigenfaces);
+    free(eigenvalues);
     return 0;
 }
 
-void compute_weighs(struct Dataset *dataset)
+void compute_weighs_cpu(struct Dataset *dataset)
 {
-    
+    int w = dataset->w;
+    int h = dataset->h;
+    int num_eigens = dataset->num_eigenfaces;
+    int n = dataset->num_original_images;
+
+    dataset->faces = (struct FaceCoordinates **)malloc(n * sizeof(struct FaceCoordinates *));
+    TEST_MALLOC(dataset->faces);
+
+    for (int i= 0; i < n; i++) {
+        dataset->faces[i] = (struct FaceCoordinates *)malloc(sizeof(struct FaceCoordinates));
+        TEST_MALLOC(dataset->faces[i]);
+    }
+
+    for (int i = 0; i < n; i++) {
+        struct FaceCoordinates *current_face = dataset->faces[i];
+        struct Image *current_image = dataset->original_images[i];
+        strcpy(current_face->name, current_image->filename);
+        char *c = strrchr(current_face->name, '.');
+        if (c)
+            *c = '\0';
+
+        PRINT("DEBUG", "Name: %s\n", current_face->name);
+
+        current_face->num_eigenfaces = num_eigens;
+        current_face->coordinates = (float *)malloc(num_eigens * sizeof(float));
+        TEST_MALLOC(current_face->coordinates);
+
+        for (int j = 0; j < num_eigens; j++) {
+            current_face->coordinates[j] = dot_product_cpu(current_image->minus_average,
+                                                dataset->eigenfaces[j], w * h);
+        }
+    }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
