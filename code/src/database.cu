@@ -175,6 +175,7 @@ void save_eigenfaces_to_disk(struct Dataset *dataset)
             }
         }
         sprintf(image->filename, "eigen/Eigenface %d.png", i);
+        // TODO: bad conversion, to fix later
         for (int j = 0; j < w * h; j++)
             image->data[j] = dataset->eigenfaces[i][j] > 0 ?
                 (unsigned char)((dataset->eigenfaces[i][j] / max) * 127 + 128) :
@@ -219,7 +220,7 @@ void save_reconstructed_face_to_disk(struct Dataset *dataset, struct FaceCoordin
             min = current;
         }
     }
-
+    PRINT("INFO", "Min: %f, Max: %f\n", min, max);
     for (int j = 0; j < image->w * image->h; j++)
         image->data[j] = (unsigned char)((image->minus_average[j] - min) / (max - min) * 255);
 

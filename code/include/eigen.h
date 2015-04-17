@@ -19,7 +19,7 @@ struct Image * compute_average_cpu(struct Dataset * dataset);
 struct Image * compute_average_gpu(struct Dataset * dataset);
 __global__ void compute_average_gpu_kernel(unsigned char *images, int w, int h, int num_image, unsigned char * average);
 float dot_product_cpu(float *a, float *b, int size);
-void jacobi_cpu(float *a, int n, float *v, float *e);
+void jacobi_cpu(const float *a, const int n, float *v, float *e);
 int comp_eigenvalues(const void *a, const void *b);
 int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep);
 void compute_weighs_cpu(struct Dataset *dataset);

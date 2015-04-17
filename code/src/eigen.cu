@@ -157,11 +157,14 @@ float dot_product_cpu(float *a, float *b, int size)
 }
 
 // Expect v to be initialized to 0
-void jacobi_cpu(float *a, int n, float *v, float *e)
+void jacobi_cpu(const float *a, const int n, float *v, float *e)
 {
     int p, q, flag, t = 0;
     float temp;
-    float theta, zero = 1e-4, max, pi = 3.141592654, c, s;
+    float theta, zero = 1e-8, max, pi = 3.141592654, c, s;
+    float *d = (float *)malloc(n * n * sizeof(float));
+    for (int i = 0; i < n * n; i++)
+        d[i] = a[i];
 
     for(int i = 0; i < n; i++)
         v[i * n + i] = 1;
@@ -170,10 +173,10 @@ void jacobi_cpu(float *a, int n, float *v, float *e)
         flag = 0;
         p = 0;
         q = 1;
-        max = fabs(a[0 * n + 1]);
+        max = fabs(d[0 * n + 1]);
         for(int i = 0; i < n; i++)
             for(int j = i + 1; j < n; j++) {
-                temp = fabs(a[i * n + j]);
+                temp = fabs(d[i * n + j]);
                 if (temp > zero) {
                     flag = 1;
                     if (temp > max) {
@@ -186,27 +189,27 @@ void jacobi_cpu(float *a, int n, float *v, float *e)
         if (!flag)
             break;
         t++;
-        if(a[p * n + p] == a[q * n + q]) {
-            if(a[p * n + q] > 0)
+        if(d[p * n + p] == d[q * n + q]) {
+            if(d[p * n + q] > 0)
                 theta = pi/4;
             else
                 theta = -pi/4;
         } else {
-            theta = 0.5 * atan(2 * a[p * n + q] / (a[p * n + p] - a[q * n + q]));
+            theta = 0.5 * atan(2 * d[p * n + q] / (d[p * n + p] - d[q * n + q]));
         }
         c = cos(theta);
         s = sin(theta);
 
         for(int i = 0; i < n; i++) {
-            temp = c * a[p * n + i] + s * a[q * n + i];
-            a[q * n + i] = -s * a[p * n + i] + c * a[q * n + i];
-            a[p * n + i] = temp;
+            temp = c * d[p * n + i] + s * d[q * n + i];
+            d[q * n + i] = -s * d[p * n + i] + c * d[q * n + i];
+            d[p * n + i] = temp;
         }
 
         for(int i = 0; i < n; i++) {
-            temp = c * a[i * n  + p] + s * a[i * n + q];
-            a[i * n + q] = -s * a[i * n + p] + c * a[i * n + q];
-            a[i * n + p] = temp;
+            temp = c * d[i * n  + p] + s * d[i * n + q];
+            d[i * n + q] = -s * d[i * n + p] + c * d[i * n + q];
+            d[i * n + p] = temp;
         }
 
         for(int i = 0; i < n; i++) {
@@ -216,22 +219,23 @@ void jacobi_cpu(float *a, int n, float *v, float *e)
         }
 
     }
-/*
+
     printf("Nb of iterations: %d\n", t);
     printf("The eigenvalues are \n");
     for(int i = 0; i < n; i++)
-        printf("%8.5f ", a[i * n + i]);
+        printf("%8.5f ", d[i * n + i]);
 
     printf("\nThe corresponding eigenvectors are \n");
     for(int j = 0; j < n; j++) {
         for(int i = 0; i < n; i++)
             printf("% 8.5f,",v[i * n + j]);
         printf("\n");
-    }*/
+    }
     for (int i = 0; i < n; i++) {
-        e[2 * i + 0] = a[i * n + i];
+        e[2 * i + 0] = d[i * n + i];
         e[2 * i + 1] = i;
     }
+    free(d);
 }
 
 // Sorts in place the eigenvalues in descending order
@@ -273,6 +277,12 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
         for (int x = 0; x < w; x++)
             for (int y = 0; y < h; y++)
                 images_minus_average[i][y * w + x] = (float)GET_PIXEL(current_image, x, y, 0) - GET_PIXEL(average, x, y, 0);
+        // Normalize images_minus_average
+        /*float norm = sqrt(dot_product_cpu(images_minus_average[i], images_minus_average[i], w * h));
+        PRINT("INFO", "Norm: %f\n", norm);
+        for (int j = 0; j < w * h; j++)
+            images_minus_average[i][j] /= norm;
+*/
 /*        sprintf(minus_average->filename, "minus/Minus Average %d.png", i);
         minus_average->data = (unsigned char *)malloc(w * h * 1 * sizeof(unsigned char));
         for (int j = 0; j < w * h; j++)
@@ -281,7 +291,7 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
                 (unsigned char)(128 - (images_minus_average[i][j] / -256) * 128);
         save_image_to_disk(minus_average, minus_average->filename);
         free(minus_average->data);
-*/    }
+*/  }
     PRINT("DEBUG", "Substracting average to images... done\n");
 
     // Construct the Covariance Matrix
@@ -307,13 +317,28 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
     jacobi_cpu(covariance_matrix, n, eigenfaces, eigenvalues);
     PRINT("DEBUG", "Computing eigenfaces... done\n");
 
+    // Check eigenvectors are correct
+    PRINT("DEBUG", "Eigenvalues are:\n");
+    for (int i = 0; i < n; i++) {
+        printf("%f ", eigenvalues[2*i+0]);
+    }
+
+    for (int i = 0; i < n; i++) {
+        float temp = 0;
+        for (int j = 0; j < n; j++)
+            temp += covariance_matrix[i * n + j] * eigenfaces[j * n + 1];
+        PRINT("DEBUG", "%f %f\n", eigenvalues[2*1+0], eigenfaces[i * n + 1]);
+        PRINT("DEBUG", "C*v %d = %f, lambda * v %d = %f\n", i, temp, i, eigenvalues[2*1+0] * eigenfaces[i * n + 1]);
+    }
+
+
     // Keep only top num_to_keep eigenfaces.
     // Assumes num_to_keep is in the correct range.
     qsort(eigenvalues, n, 2 * sizeof(float), comp_eigenvalues);
     for (int i = 0; i < n; i++)
         PRINT("DEBUG", "Eigenvalue #%d (index %d): %f\n", i, (int)eigenvalues[2 * i + 1], eigenvalues[2 * i]);
 
-    // Convert size n*n eigenfaces to size w*h
+    // Convert size n eigenfaces to size w*h
     dataset->num_eigenfaces = num_to_keep;
     dataset->eigenfaces = (float **)malloc(num_to_keep * sizeof(float *));
     TEST_MALLOC(dataset->eigenfaces);
@@ -321,6 +346,9 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
         dataset->eigenfaces[i] = (float *)malloc(w * h * sizeof(float));
         TEST_MALLOC(dataset->eigenfaces[i]);
     }
+
+    // Normalize eigenfaces in the loop
+    // Unprobable corner case if all values are >0 or <0
     float sqrt_n = sqrt(n);
     for (int i = 0; i < num_to_keep; i++) {
         int index = (int)eigenvalues[2 * i + 1];
@@ -332,6 +360,43 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
         }
     }
     PRINT("DEBUG", "Transforming eigenfaces... done\n");
+
+/*  for (int i = 0; i < w * h; i++)
+        printf("%f ", dataset->eigenfaces[0][i]);
+    printf("\n");
+*/
+    // normalize new eigenfaces
+    for (int i = 0; i < num_to_keep; i++) {
+        float mean = 0;
+        for (int j = 0; j < w * h; j++)
+            mean += dataset->eigenfaces[i][j];
+        mean /= (w + h);
+        for (int j = 0; j < w * h; j++)
+            dataset->eigenfaces[i][j] /= mean;
+        float norm = sqrt(dot_product_cpu(dataset->eigenfaces[i], dataset->eigenfaces[i], w * h));
+        for (int j = 0; j < w * h; j++)
+            dataset->eigenfaces[i][j] /= norm;
+    }
+    
+    for (int i = 0; i < w * h; i++)
+        printf("%f ", dataset->eigenfaces[0][i]);
+    printf("\n");
+
+
+    // Test if eigenfaces are orthogonal
+    for (int i = 0; i < n; i++)
+        PRINT("DEBUG", "<0|%d> = %f\n", i, dot_product_cpu(dataset->eigenfaces[0], dataset->eigenfaces[i], w * h));
+
+    // Test if eigenfaces before transform are orthogonal
+    float *original_eigenfaces_5 = (float *)malloc(n * sizeof(float));
+    float *original_eigenfaces_i = (float *)malloc(n * sizeof(float));
+    for (int j = 0; j < n; j++)
+        original_eigenfaces_5[j] = eigenfaces[j * n + 5];
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++)
+            original_eigenfaces_i[j] = eigenfaces[j * n + i];
+        PRINT("DEBUG", "<0|%d> = %f\n", i, dot_product_cpu(original_eigenfaces_5, original_eigenfaces_i, n));
+    }
 
     free(covariance_matrix);
     free(eigenfaces);
@@ -371,7 +436,9 @@ void compute_weighs_cpu(struct Dataset *dataset)
         for (int j = 0; j < num_eigens; j++) {
             current_face->coordinates[j] = dot_product_cpu(current_image->minus_average,
                                                 dataset->eigenfaces[j], w * h);
+            PRINT("INFO", "%f ", current_face->coordinates[j]);
         }
+        printf("\n");
     }
 }
 

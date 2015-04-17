@@ -74,7 +74,7 @@ int main(int argc, char **argv)
 
     // Eigenfaces
     PRINT("INFO", "Start eigenfaces computation\n");
-    compute_eigenfaces_cpu(dataset, 20);
+    compute_eigenfaces_cpu(dataset, dataset->num_original_images);
     PRINT("INFO", "End eigenfaces computation\n");
     save_eigenfaces_to_disk(dataset);
     PRINT("INFO", "Start coordinates computation\n");
@@ -82,7 +82,7 @@ int main(int argc, char **argv)
     PRINT("INFO", "End coordinates computation\n");
     PRINT("INFO", "Start reconstruction\n");
     for (int i = 0; i < dataset->num_original_images; i++)
-        save_reconstructed_face_to_disk(dataset, dataset->faces[i], 20);
+        save_reconstructed_face_to_disk(dataset, dataset->faces[i], dataset->num_original_images);
     PRINT("INFO", "End reconstruction\n");
 
 
