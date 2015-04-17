@@ -10,6 +10,19 @@
 
 #define THREADS_PER_BLOCK 256
 
+void normalize_cpu(float *array, int size)
+{
+    float mean = 0;
+    for (int j = 0; j < size; j++)
+        mean += array[j];
+    mean /= size;
+    for (int j = 0; j < size; j++)
+        array[j] /= mean;
+    float norm = sqrt(dot_product_cpu(array, array, size));
+    for (int j = 0; j < size; j++)
+        array[j] /= norm;
+}
+
 // returns NULL if error, otherwise returns pointer to average
 struct Image * compute_average_cpu(struct Dataset * dataset)
 {
@@ -29,34 +42,25 @@ struct Image * compute_average_cpu(struct Dataset * dataset)
     struct Image *average = (struct Image *)malloc(sizeof(struct Image));
     TEST_MALLOC(average);
 
-    average->data = (unsigned char *)malloc(w * h * sizeof(unsigned char));
-    TEST_MALLOC(average->data);
     average->w = w;
     average->h = h;
     average->comp = 1;
-    average->minus_average = (float *)malloc(w * h * sizeof(float));
-    TEST_MALLOC(average->minus_average);
+    average->data = (float *)malloc(w * h * sizeof(float));
+    TEST_MALLOC(average->data);
 
     for (int x = 0; x < w; x++) {
         for (int y = 0; y < h; y++) {
-            int sum = 0;
+            float sum = 0;
             for (int i = 0; i < n; i++)
                 sum += GET_PIXEL(dataset->original_images[i], x, y, 0);
             average->data[y * w + x + 0] = (sum / n);
         }
     }
 
-    // Normalise
-    float mean = 0;
-    for (int j = 0; j < w * h; j++)
-        mean += average->data[j];
-    mean /= (w * h);
-    for (int j = 0; j < w * h; j++)
-        average->minus_average[j] =  average->data[j] / mean;
-    float norm = sqrt(dot_product_cpu(average->minus_average, average->minus_average, w * h));
-    for (int j = 0; j < w * h; j++)
-        average->minus_average[j] /= norm;
-
+    // Normalize
+    normalize_cpu(average->data, w * h);
+    for (int i = 0; i < 100; i++)
+        PRINT("DEBUG", "Average: %f\n", average->data[i]);
     dataset->average = average;
     return average;
 }
@@ -76,36 +80,28 @@ struct Image * compute_average_gpu(struct Dataset * dataset)
         PRINT("WARN", "No image in dataset\n");
         return NULL;
     }
-/*
-    unsigned char *h_images = (unsigned char*)malloc(n*w*h*sizeof(unsigned char ));
-    for(int i=0; i<n; i++){
-        for(int j=0; j<w*h; j++){
-            unsigned char *data = (dataset->original_images)[i]->data;
-            h_images[w*h*i+j] = data[j];
-        }
-    }
-*/
-    unsigned char *d_images;
+
+    float *d_images;
     GPU_CHECKERROR(
-    cudaMalloc((void **)&d_images, n * w * h * sizeof(unsigned char))
+    cudaMalloc((void **)&d_images, n * w * h * sizeof(float))
     );
     for(int i = 0; i < n; i++){
         GPU_CHECKERROR(
         cudaMemcpy((void*)(d_images + i * w * h),
                    (void*)(dataset->original_images)[i]->data,
-                   w * h * sizeof(unsigned char),
+                   w * h * sizeof(float),
                    cudaMemcpyHostToDevice)
         );
     }
 
-    unsigned char *h_average_image = (unsigned char*)malloc(w * h * sizeof(unsigned char));
+    float *h_average_image = (float *)malloc(w * h * sizeof(float));
     TEST_MALLOC(h_average_image);
-    unsigned char *d_average_image;
+    float *d_average_image;
     GPU_CHECKERROR(
-    cudaMalloc((void **)&d_average_image, w * h * sizeof(unsigned char))
+    cudaMalloc((void **)&d_average_image, w * h * sizeof(float))
     );
     GPU_CHECKERROR(
-    cudaMemset((void*)d_average_image, 0, w * h * sizeof(unsigned char))
+    cudaMemset((void*)d_average_image, 0, w * h * sizeof(float))
     );
 
 
@@ -122,7 +118,7 @@ struct Image * compute_average_gpu(struct Dataset * dataset)
     GPU_CHECKERROR(
     cudaMemcpy((void*)h_average_image,
                (void*)d_average_image,
-               w * h * sizeof(unsigned char),
+               w * h * sizeof(float),
                cudaMemcpyDeviceToHost)
     );
 
@@ -132,7 +128,6 @@ struct Image * compute_average_gpu(struct Dataset * dataset)
     h_average->w = w;
     h_average->h = h;
     h_average->comp = 1;
-    h_average->minus_average = NULL;
 
     GPU_CHECKERROR(
     cudaFree(d_average_image)
@@ -147,13 +142,13 @@ struct Image * compute_average_gpu(struct Dataset * dataset)
 
 
 __global__
-void compute_average_gpu_kernel(unsigned char *images, int w, int h, int num_image, unsigned char *average)
+void compute_average_gpu_kernel(float *images, int w, int h, int num_image, float *average)
 {
     int x = blockDim.x * blockIdx.x + threadIdx.x;
     int y = blockDim.y * blockIdx.y + threadIdx.y;
     if(x >= w || y >= h)
         return;
-    int sum = 0;
+    float sum = 0;
     for (int i = 0; i < num_image; i++)
         sum += images[i * w * h + y * w + x + 0];
     average[y * w + x + 0] = (sum / num_image);
@@ -174,7 +169,7 @@ void jacobi_cpu(const float *a, const int n, float *v, float *e)
 {
     int p, q, flag, t = 0;
     float temp;
-    float theta, zero = 1e-8, max, pi = 3.141592654, c, s;
+    float theta, zero = 1e-6, max, pi = 3.141592654, c, s;
     float *d = (float *)malloc(n * n * sizeof(float));
     for (int i = 0; i < n * n; i++)
         d[i] = a[i];
@@ -201,6 +196,8 @@ void jacobi_cpu(const float *a, const int n, float *v, float *e)
             }
         if (!flag)
             break;
+        if (t % 1000 == 0)
+            PRINT("DEBUG", "Iteration %d, max = %f\n", t, max);
         t++;
         if(d[p * n + p] == d[q * n + q]) {
             if(d[p * n + q] > 0)
@@ -234,7 +231,7 @@ void jacobi_cpu(const float *a, const int n, float *v, float *e)
     }
 
     printf("Nb of iterations: %d\n", t);
-    printf("The eigenvalues are \n");
+/*  printf("The eigenvalues are \n");
     for(int i = 0; i < n; i++)
         printf("%8.5f ", d[i * n + i]);
 
@@ -243,7 +240,7 @@ void jacobi_cpu(const float *a, const int n, float *v, float *e)
         for(int i = 0; i < n; i++)
             printf("% 8.5f,",v[i * n + j]);
         printf("\n");
-    }
+    }*/
     for (int i = 0; i < n; i++) {
         e[2 * i + 0] = d[i * n + i];
         e[2 * i + 1] = i;
@@ -267,44 +264,17 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
     TEST_MALLOC(images_minus_average);
 
     for (int i = 0; i < n; i++) {
-        dataset->original_images[i]->minus_average = (float *)malloc(w * h * sizeof(float));
-        TEST_MALLOC(dataset->original_images[i]->minus_average);
-        images_minus_average[i] = dataset->original_images[i]->minus_average;
+        images_minus_average[i] = dataset->original_images[i]->data;
     }
 
-    // Test minus average
-/*
-    struct Image *minus_average = (struct Image *)malloc(sizeof(struct Image));
-    TEST_MALLOC(minus_average);
-    minus_average->w = w;
-    minus_average->h = h;
-    minus_average->comp = 1;
-    minus_average->req_comp = 1;
-    minus_average->minus_average = NULL;
-*/
     // Substract average to images
     struct Image *average = dataset->average;
     for (int i = 0; i < n; i++) {
-        struct Image *current_image = dataset->original_images[i];
-        // Maybe switching the 2 loops results in faster computation
-        for (int x = 0; x < w; x++)
-            for (int y = 0; y < h; y++)
-                images_minus_average[i][y * w + x] = (float)GET_PIXEL(current_image, x, y, 0) - GET_PIXEL(average, x, y, 0);
+        for (int j = 0; j < w * h; j++)
+            images_minus_average[i][j] = (images_minus_average[i][j] - average->data[j]) * 1000; // otherwise the dot product will be too small and jocobi will fail
         // Normalize images_minus_average
-        /*float norm = sqrt(dot_product_cpu(images_minus_average[i], images_minus_average[i], w * h));
-        PRINT("INFO", "Norm: %f\n", norm);
-        for (int j = 0; j < w * h; j++)
-            images_minus_average[i][j] /= norm;
-*/
-/*        sprintf(minus_average->filename, "minus/Minus Average %d.png", i);
-        minus_average->data = (unsigned char *)malloc(w * h * 1 * sizeof(unsigned char));
-        for (int j = 0; j < w * h; j++)
-            minus_average->data[j] = images_minus_average[i][j] > 0 ?
-                (unsigned char)((images_minus_average[i][j] / 256) * 127 + 128) :
-                (unsigned char)(128 - (images_minus_average[i][j] / -256) * 128);
-        save_image_to_disk(minus_average, minus_average->filename);
-        free(minus_average->data);
-*/  }
+	// normalize_cpu(...);
+    }
     PRINT("DEBUG", "Substracting average to images... done\n");
 
     // Construct the Covariance Matrix
@@ -353,15 +323,20 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
 
     // Convert size n eigenfaces to size w*h
     dataset->num_eigenfaces = num_to_keep;
-    dataset->eigenfaces = (float **)malloc(num_to_keep * sizeof(float *));
+    dataset->eigenfaces = (struct Image **)malloc(num_to_keep * sizeof(struct Image *));
     TEST_MALLOC(dataset->eigenfaces);
     for (int i = 0; i < num_to_keep; i++) {
-        dataset->eigenfaces[i] = (float *)malloc(w * h * sizeof(float));
+        dataset->eigenfaces[i] = (struct Image *)malloc(sizeof(struct Image));
         TEST_MALLOC(dataset->eigenfaces[i]);
+        dataset->eigenfaces[i]->data = (float *)malloc(w * h * sizeof(float));
+        TEST_MALLOC(dataset->eigenfaces[i]->data);
+        dataset->eigenfaces[i]->w = w;
+        dataset->eigenfaces[i]->h = h;
+        dataset->eigenfaces[i]->comp = 1;
+        dataset->eigenfaces[i]->req_comp = 1;
+        sprintf(dataset->eigenfaces[i]->filename, "Eigen_%d", i);
     }
 
-    // Normalize eigenfaces in the loop
-    // Unprobable corner case if all values are >0 or <0
     float sqrt_n = sqrt(n);
     for (int i = 0; i < num_to_keep; i++) {
         int index = (int)eigenvalues[2 * i + 1];
@@ -369,36 +344,15 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
             float temp = 0;
             for (int k = 0; k < n; k++)
                 temp += images_minus_average[k][j] * eigenfaces[k * n + index];
-            dataset->eigenfaces[i][j] = temp / sqrt_n;
+            dataset->eigenfaces[i]->data[j] = temp / sqrt_n;
         }
+        normalize_cpu(dataset->eigenfaces[i]->data, w * h);
     }
     PRINT("DEBUG", "Transforming eigenfaces... done\n");
 
-/*  for (int i = 0; i < w * h; i++)
-        printf("%f ", dataset->eigenfaces[0][i]);
-    printf("\n");
-*/
-    // normalize new eigenfaces
-    for (int i = 0; i < num_to_keep; i++) {
-        float mean = 0;
-        for (int j = 0; j < w * h; j++)
-            mean += dataset->eigenfaces[i][j];
-        mean /= (w + h);
-        for (int j = 0; j < w * h; j++)
-            dataset->eigenfaces[i][j] /= mean;
-        float norm = sqrt(dot_product_cpu(dataset->eigenfaces[i], dataset->eigenfaces[i], w * h));
-        for (int j = 0; j < w * h; j++)
-            dataset->eigenfaces[i][j] /= norm;
-    }
-
-    for (int i = 0; i < w * h; i++)
-        printf("%f ", dataset->eigenfaces[0][i]);
-    printf("\n");
-
-
     // Test if eigenfaces are orthogonal
     for (int i = 0; i < n; i++)
-        PRINT("DEBUG", "<0|%d> = %f\n", i, dot_product_cpu(dataset->eigenfaces[0], dataset->eigenfaces[i], w * h));
+        PRINT("DEBUG", "<0|%d> = %f\n", i, dot_product_cpu(dataset->eigenfaces[0]->data, dataset->eigenfaces[i]->data, w * h));
 
     // Test if eigenfaces before transform are orthogonal
     float *original_eigenfaces_5 = (float *)malloc(n * sizeof(float));
@@ -448,18 +402,11 @@ void compute_weighs_cpu(struct Dataset *dataset)
         TEST_MALLOC(current_face->coordinates);
 
         for (int j = 0; j < num_eigens; j++)
-            current_face->coordinates[j] = dot_product_cpu(current_image->minus_average,
-                                                dataset->eigenfaces[j], w * h);
+            current_face->coordinates[j] = dot_product_cpu(current_image->data,
+                                                dataset->eigenfaces[j]->data, w * h);
 
-        float mean = 0;
-        for (int j = 0; j < num_eigens; j++)
-            mean += current_face->coordinates[j];
-        mean /= num_eigens;
-        for (int j = 0; j < num_eigens; j++)
-            current_face->coordinates[j] /= mean;
-        float norm = sqrt(dot_product_cpu(current_face->coordinates, current_face->coordinates, num_eigens));
-        for (int j = 0; j < num_eigens; j++)
-            current_face->coordinates[j] /= norm;
+        // Normalize?
+        normalize_cpu(current_face->coordinates, num_eigens);
 
         for (int j = 0; j < num_eigens; j++)
             printf("%f ", current_face->coordinates[j]);
@@ -487,15 +434,3 @@ struct FaceCoordinates * get_closest_match_cpu(struct Dataset *dataset, struct F
     }
     return closest;
 }
-
-
-
-
-
-
-
-
-
-
-
-

@@ -35,8 +35,8 @@ int main(int argc, char **argv)
         PRINT("WARN", "file could not be loaded.\n");
     } else {
         PRINT("", "Image width: %d, height: %d, comp: %d\n", image->w, image->h, image->comp);
-        PRINT("", "grey: %d\n", GET_PIXEL(image, 0, 0, 0));
-        PRINT("", "grey: %d\n", GET_PIXEL(image, 156, 15, 0));
+        PRINT("", "grey: %f\n", GET_PIXEL(image, 0, 0, 0));
+        PRINT("", "grey: %f\n", GET_PIXEL(image, 156, 15, 0));
     }
     free_image(image);
 
@@ -76,7 +76,11 @@ int main(int argc, char **argv)
     PRINT("INFO", "Start eigenfaces computation\n");
     compute_eigenfaces_cpu(dataset, dataset->num_original_images);
     PRINT("INFO", "End eigenfaces computation\n");
-    save_eigenfaces_to_disk(dataset);
+    char name[100]= "";
+    for (int i = 0; i < dataset->num_eigenfaces; i++) {
+	sprintf(name, "eigen/Eigenface %d.png", i);
+    	save_image_to_disk(dataset->eigenfaces[i], name);
+    }
     PRINT("INFO", "Start coordinates computation\n");
     compute_weighs_cpu(dataset);
     PRINT("INFO", "End coordinates computation\n");
@@ -87,6 +91,7 @@ int main(int argc, char **argv)
     for (int i = 0; i < dataset->num_faces; i++)
         PRINT("INFO", "The Closest match of %s is %s.\n", dataset->faces[i]->name, get_closest_match_cpu(dataset, dataset->faces[i])->name);
 
+    save_dataset_to_disk(dataset, "dataset1.dat");
 
 
 
@@ -102,8 +107,8 @@ int main(int argc, char **argv)
         PRINT("BUG","average computation failed\n");
         return EXIT_FAILURE;
     }
-    //PRINT("", "grey 0, 0: %d\n", GET_PIXEL(average_gpu, 0, 0, 0));
-    //PRINT("", "grey 156, 15: %d\n", GET_PIXEL(average_gpu, 156, 15, 0));
+    //PRINT("", "grey 0, 0: %f\n", GET_PIXEL(average_gpu, 0, 0, 0));
+    //PRINT("", "grey 156, 15: %f\n", GET_PIXEL(average_gpu, 156, 15, 0));
 
     save_image_to_disk(average_gpu, "average_gpu.png");
 
