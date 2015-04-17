@@ -84,6 +84,9 @@ int main(int argc, char **argv)
     for (int i = 0; i < dataset->num_original_images; i++)
         save_reconstructed_face_to_disk(dataset, dataset->faces[i], dataset->num_original_images);
     PRINT("INFO", "End reconstruction\n");
+    for (int i = 0; i < dataset->num_faces; i++)
+        PRINT("INFO", "The Closest match of %s is %s.\n", dataset->faces[i]->name, get_closest_match_cpu(dataset, dataset->faces[i])->name);
+
 
 
 

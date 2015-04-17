@@ -207,7 +207,7 @@ void save_reconstructed_face_to_disk(struct Dataset *dataset, struct FaceCoordin
     }
 
     for (int j = 0; j < image->w * image->h; j++)
-        image->minus_average[j] += dataset->average->data[j];
+        image->minus_average[j] += dataset->average->minus_average[j];
 
 
     float min = image->minus_average[0];

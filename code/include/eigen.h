@@ -23,6 +23,7 @@ void jacobi_cpu(const float *a, const int n, float *v, float *e);
 int comp_eigenvalues(const void *a, const void *b);
 int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep);
 void compute_weighs_cpu(struct Dataset *dataset);
+struct FaceCoordinates * get_closest_match_cpu(struct Dataset *dataset, struct FaceCoordinates *face);
 
 int compute_eigenfaces_gpu(struct Dataset * dataset, int num_to_keep);
 #endif

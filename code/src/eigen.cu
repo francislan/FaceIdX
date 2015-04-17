@@ -34,7 +34,8 @@ struct Image * compute_average_cpu(struct Dataset * dataset)
     average->w = w;
     average->h = h;
     average->comp = 1;
-    average->minus_average = NULL;
+    average->minus_average = (float *)malloc(w * h * sizeof(float));
+    TEST_MALLOC(average->minus_average);
 
     for (int x = 0; x < w; x++) {
         for (int y = 0; y < h; y++) {
@@ -44,6 +45,18 @@ struct Image * compute_average_cpu(struct Dataset * dataset)
             average->data[y * w + x + 0] = (sum / n);
         }
     }
+
+    // Normalise
+    float mean = 0;
+    for (int j = 0; j < w * h; j++)
+        mean += average->data[j];
+    mean /= (w * h);
+    for (int j = 0; j < w * h; j++)
+        average->minus_average[j] =  average->data[j] / mean;
+    float norm = sqrt(dot_product_cpu(average->minus_average, average->minus_average, w * h));
+    for (int j = 0; j < w * h; j++)
+        average->minus_average[j] /= norm;
+
     dataset->average = average;
     return average;
 }
@@ -377,7 +390,7 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
         for (int j = 0; j < w * h; j++)
             dataset->eigenfaces[i][j] /= norm;
     }
-    
+
     for (int i = 0; i < w * h; i++)
         printf("%f ", dataset->eigenfaces[0][i]);
     printf("\n");
@@ -413,6 +426,7 @@ void compute_weighs_cpu(struct Dataset *dataset)
 
     dataset->faces = (struct FaceCoordinates **)malloc(n * sizeof(struct FaceCoordinates *));
     TEST_MALLOC(dataset->faces);
+    dataset->num_faces = n;
 
     for (int i= 0; i < n; i++) {
         dataset->faces[i] = (struct FaceCoordinates *)malloc(sizeof(struct FaceCoordinates));
@@ -433,16 +447,46 @@ void compute_weighs_cpu(struct Dataset *dataset)
         current_face->coordinates = (float *)malloc(num_eigens * sizeof(float));
         TEST_MALLOC(current_face->coordinates);
 
-        for (int j = 0; j < num_eigens; j++) {
+        for (int j = 0; j < num_eigens; j++)
             current_face->coordinates[j] = dot_product_cpu(current_image->minus_average,
                                                 dataset->eigenfaces[j], w * h);
-            PRINT("INFO", "%f ", current_face->coordinates[j]);
-        }
+
+        float mean = 0;
+        for (int j = 0; j < num_eigens; j++)
+            mean += current_face->coordinates[j];
+        mean /= num_eigens;
+        for (int j = 0; j < num_eigens; j++)
+            current_face->coordinates[j] /= mean;
+        float norm = sqrt(dot_product_cpu(current_face->coordinates, current_face->coordinates, num_eigens));
+        for (int j = 0; j < num_eigens; j++)
+            current_face->coordinates[j] /= norm;
+
+        for (int j = 0; j < num_eigens; j++)
+            printf("%f ", current_face->coordinates[j]);
         printf("\n");
     }
 }
 
+struct FaceCoordinates * get_closest_match_cpu(struct Dataset *dataset, struct FaceCoordinates *face)
+{
+    float min = 255; // is that the max?
+    struct FaceCoordinates *closest = NULL;
+    int num_eigens = face->num_eigenfaces;
+    float *diff = (float *)malloc(num_eigens * sizeof(float));
+    TEST_MALLOC(diff);
 
+    for (int i = 0; i < dataset->num_faces; i++) {
+        for (int j = 0; j < num_eigens; j++)
+            diff[j] = face->coordinates[j] - dataset->faces[i]->coordinates[j];
+        float distance = sqrt(dot_product_cpu(diff, diff, num_eigens));
+        PRINT("DEBUG", "Distance between %s and %s is %f\n", face->name, dataset->faces[i]->name, distance);
+        if (distance < min) {
+            min = distance;
+            closest = dataset->faces[i];
+        }
+    }
+    return closest;
+}
 
 
 
