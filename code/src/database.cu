@@ -87,7 +87,7 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
     dataset = (struct Dataset *)malloc(sizeof(struct Dataset));
 
     TEST_MALLOC(dataset);
-    dataset->name = name;
+    strcpy(dataset->name, name);
     dataset->path = dataset_path;
     dataset->num_original_images = num_images;
     dataset->original_images = (struct Image **)malloc(num_images * sizeof(struct Image *));
@@ -133,9 +133,113 @@ end:
     return dataset;
 }
 
+// No input checking -> Not secure at all
 struct Dataset * load_dataset(const char *path)
 {
-    return NULL;
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) {
+        PRINT("WARN", "Unable to open file %s!\n", path);
+        return NULL;
+    }
+    struct Dataset *dataset = (struct Dataset *)malloc(sizeof(struct Dataset));
+    TEST_MALLOC(dataset);
+    dataset->path = path;
+    dataset->num_eigenfaces = 0;
+    dataset->num_original_images = 0;
+    dataset->num_faces = 0;
+    dataset->num_new_faces = 0;
+    dataset->w = 0;
+    dataset->h = 0;
+    dataset->original_images = NULL;
+    dataset->average = NULL;
+    dataset->eigenfaces = NULL;
+    dataset->faces = NULL;
+
+    for (int i = 0; i < 100; i++) {
+        fread(dataset->name + i, sizeof(char), 1, f);
+        if (dataset->name[i] == '\0')
+            break;
+    }
+    fread(&(dataset->w), sizeof(int), 1, f);
+    fread(&(dataset->h), sizeof(int), 1, f);
+    int w = dataset->w;
+    int h = dataset->h;
+    fread(&(dataset->num_eigenfaces), sizeof(int), 1, f);
+
+    dataset->average = (struct Image *)malloc(sizeof(struct Image));
+    TEST_MALLOC(dataset->average);
+
+    dataset->average->w = w;
+    dataset->average->h = h;
+    dataset->average->comp = 1;
+    dataset->average->req_comp = 1;
+    dataset->average->data = (float *)malloc(w * h * sizeof(float));
+    TEST_MALLOC(dataset->average->data);
+    for (int i = 0; i < 100; i++) {
+        fread(dataset->average->filename + i, sizeof(char), 1, f);
+        if (dataset->average->filename[i] == '\0')
+            break;
+    }
+    fread(dataset->average->data, w * h * sizeof(float), 1, f);
+
+    dataset->eigenfaces = (struct Image **)malloc(dataset->num_eigenfaces * sizeof(struct Image *));
+    TEST_MALLOC(dataset->eigenfaces);
+
+    for (int i = 0; i < dataset->num_eigenfaces; i++) {
+        dataset->eigenfaces[i] = (struct Image *)malloc(sizeof(struct Image));
+        TEST_MALLOC(dataset->eigenfaces[i]);
+
+        dataset->eigenfaces[i]->w = w;
+        dataset->eigenfaces[i]->h = h;
+        dataset->eigenfaces[i]->comp = 1;
+        dataset->eigenfaces[i]->req_comp = 1;
+        dataset->eigenfaces[i]->data = (float *)malloc(w * h * sizeof(float));
+        TEST_MALLOC(dataset->eigenfaces[i]->data);
+        for (int k = 0; k < 100; k++) {
+            fread(dataset->eigenfaces[i]->filename + k, sizeof(char), 1, f);
+            if (dataset->eigenfaces[i]->filename[k] == '\0')
+               break;
+        }
+        fread(dataset->eigenfaces[i]->data, w * h * sizeof(float), 1, f);
+    }
+
+    int current_size = 0;
+    char c;
+    int num_allocated_faces = 50;
+    dataset->faces = (struct FaceCoordinates **)malloc(num_allocated_faces * sizeof(struct FaceCoordinates *));
+    TEST_MALLOC(dataset->faces);
+    while (1) {
+        size_t read = fread(&c, sizeof(char), 1, f);
+        if (c != '\0' || read != 1)
+            break;
+
+        current_size++;
+        if (current_size > num_allocated_faces) {
+            num_allocated_faces *= 2;
+            dataset->faces = (struct FaceCoordinates **)realloc(dataset->faces, num_allocated_faces * sizeof(struct FaceCoordinates *));
+            TEST_MALLOC(dataset->faces);
+        }
+
+        dataset->faces[current_size - 1] = (struct FaceCoordinates *)malloc(sizeof(struct FaceCoordinates));
+        TEST_MALLOC(dataset->faces[current_size - 1]);
+
+        dataset->faces[current_size - 1]->num_eigenfaces = dataset->num_eigenfaces;
+        dataset->faces[current_size - 1]->coordinates = (float *)malloc(dataset->num_eigenfaces * sizeof(float));
+        TEST_MALLOC(dataset->faces[current_size - 1]->coordinates);
+        for (int k = 0; k < 100; k++) {
+            fread(dataset->faces[current_size - 1]->name + k, sizeof(char), 1, f);
+            if (dataset->faces[current_size - 1]->name[k] == '\0')
+               break;
+        }
+        fread(dataset->faces[current_size - 1]->coordinates, dataset->num_eigenfaces * sizeof(float), 1, f);
+    }
+    if (current_size < num_allocated_faces) {
+        dataset->faces = (struct FaceCoordinates **)realloc(dataset->faces, current_size * sizeof(struct FaceCoordinates *));
+        TEST_MALLOC(dataset->faces);
+    }
+    dataset->num_faces = current_size;
+    fclose(f);
+    return dataset;
 }
 
 // Call this only if dataset is well defined (not NULL, average computed, etc)
@@ -155,7 +259,6 @@ int save_dataset_to_disk(struct Dataset *dataset, const char *path)
             fwrite("\0", sizeof(char), 1, f);
             for (int j = 0; j < face->num_eigenfaces; j++)
                 fwrite(&(face->coordinates[j]), sizeof(float), 1, f);
-            fwrite("\0\0\0\0", sizeof(float), 1, f);
         }
         fclose(f);
     } else {
@@ -169,14 +272,10 @@ int save_dataset_to_disk(struct Dataset *dataset, const char *path)
         fwrite(&(dataset->w), sizeof(int), 1, f);
         fwrite(&(dataset->h), sizeof(int), 1, f);
         fwrite(&(dataset->num_eigenfaces), sizeof(int), 1, f);
-        float *data = NULL;
 
         fwrite("Average", sizeof(char), strlen("Average"), f);
         fwrite("\0", sizeof(char), 1, f);
-        data = dataset->average->data;
-        for (int j = 0; j < dataset->w * dataset->h; j++)
-            fwrite(&(data[j]), sizeof(float), 1, f);
-        fwrite("\0\0\0\0", sizeof(float), 1, f);
+        fwrite(dataset->average->data, dataset->w * dataset-> h * sizeof(float), 1, f);
 
         char name[100] = "";
 
@@ -184,19 +283,21 @@ int save_dataset_to_disk(struct Dataset *dataset, const char *path)
             sprintf(name, "Eigen %d", i);
             fwrite(name, sizeof(char), strlen(name), f);
             fwrite("\0", sizeof(char), 1, f);
-            data = dataset->eigenfaces[i]->data;
-            for (int j = 0; j < dataset->w * dataset->h; j++)
-                fwrite(&(data[j]), sizeof(float), 1, f);
-            fwrite("\0\0\0\0", sizeof(float), 1, f);
+            fwrite(dataset->eigenfaces[i]->data, dataset->w * dataset->h * sizeof(float), 1, f);
         }
 
+        // Do not write a '\0' at end of file
+        // This is making the dataset loading function simpler
+        if (dataset->num_faces > 0)
+            fwrite("\0", sizeof(char), 1, f);
         for (int i = 0; i < dataset->num_faces; i++) {
             fwrite(dataset->faces[i]->name, sizeof(char), strlen(dataset->faces[i]->name), f);
             fwrite("\0", sizeof(char), 1, f);
-            data = dataset->faces[i]->coordinates;
-            for (int j = 0; j < dataset->num_eigenfaces; j++)
-                fwrite(&(data[j]), sizeof(float), 1, f);
-            fwrite("\0\0\0\0", sizeof(float), 1, f);
+            fwrite(dataset->faces[i]->coordinates, dataset->num_eigenfaces * sizeof(float), 1, f);
+            // Do not write a '\0' at end of file
+            // This is making the dataset loading function simpler
+            if (i < dataset->num_faces - 1)
+                fwrite("\0", sizeof(char), 1, f);
         }
         fclose(f);
     }

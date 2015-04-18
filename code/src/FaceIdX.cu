@@ -95,6 +95,9 @@ int main(int argc, char **argv)
 
 
 
+
+
+
     GPU_CHECKERROR(cudaEventRecord(start_gpu, 0));
     struct Image *average_gpu = compute_average_gpu(dataset);
 
@@ -114,6 +117,23 @@ int main(int argc, char **argv)
 
     fclose(f);
     free_dataset(dataset);
+
+    // Test loading dataset
+    struct Dataset *dataset2 = load_dataset("dataset1.dat");
+    if (dataset == NULL) {
+        PRINT("BUG","Dataset loading failed\n");
+        return EXIT_FAILURE;
+    }
+    PRINT("", "Dataset name: %s\n", dataset->name);
+    PRINT("", "Dataset path: %s\n", dataset->path);
+    PRINT("", "Dataset num faces: %d\n", dataset->num_faces);
+    PRINT("", "Dataset num eigenfaces: %d\n", dataset->num_eigenfaces);
+    PRINT("", "Dataset w: %d\n", dataset->w);
+    PRINT("", "Dataset h: %d\n", dataset->h);
+
+    free_dataset(dataset2);
+
+
     GPU_CHECKERROR(cudaEventDestroy(start_cpu));
     GPU_CHECKERROR(cudaEventDestroy(end_cpu));
     GPU_CHECKERROR(cudaEventDestroy(start_gpu));

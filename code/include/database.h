@@ -21,7 +21,7 @@ struct FaceCoordinates {
 };
 
 struct Dataset {
-	const char *name;
+	char name[100];
 	const char *path;
 	int num_eigenfaces;
 	int num_original_images;
