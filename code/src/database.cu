@@ -262,7 +262,7 @@ int save_dataset_to_disk(struct Dataset *dataset, const char *path)
         }
         fclose(f);
     } else {
-        FILE *f = fopen(path, "w");
+        FILE *f = fopen(path, "wb");
         if (f == NULL) {
             PRINT("WARNING", "Unable to create file %s!\n", path);
             return 1;

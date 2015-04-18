@@ -351,7 +351,7 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
     PRINT("DEBUG", "Transforming eigenfaces... done\n");
 
     // Test if eigenfaces are orthogonal
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < num_to_keep; i++)
         PRINT("DEBUG", "<0|%d> = %f\n", i, dot_product_cpu(dataset->eigenfaces[0]->data, dataset->eigenfaces[i]->data, w * h));
 
     // Test if eigenfaces before transform are orthogonal
