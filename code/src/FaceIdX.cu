@@ -87,7 +87,7 @@ int main(int argc, char **argv)
     PRINT("INFO", "End coordinates computation\n");
     PRINT("INFO", "Start reconstruction\n");
     for (int i = 0; i < dataset->num_original_images; i++)
-        save_reconstructed_face_to_disk(dataset, dataset->faces[i], dataset->num_original_images);
+        save_reconstructed_face_to_disk(dataset, dataset->faces[i], dataset->num_eigenfaces);
     PRINT("INFO", "End reconstruction\n");
     for (int i = 0; i < dataset->num_faces; i++)
         PRINT("INFO", "The Closest match of %s is %s.\n", dataset->faces[i]->name, get_closest_match_cpu(dataset, dataset->faces[i])->name);
@@ -121,16 +121,16 @@ int main(int argc, char **argv)
 
     // Test loading dataset
     struct Dataset *dataset2 = load_dataset("dataset1.dat");
-    if (dataset == NULL) {
+    if (dataset2 == NULL) {
         PRINT("BUG","Dataset loading failed\n");
         return EXIT_FAILURE;
     }
-    PRINT("", "Dataset name: %s\n", dataset->name);
-    PRINT("", "Dataset path: %s\n", dataset->path);
-    PRINT("", "Dataset num faces: %d\n", dataset->num_faces);
-    PRINT("", "Dataset num eigenfaces: %d\n", dataset->num_eigenfaces);
-    PRINT("", "Dataset w: %d\n", dataset->w);
-    PRINT("", "Dataset h: %d\n", dataset->h);
+    PRINT("", "Dataset name: %s\n", dataset2->name);
+    PRINT("", "Dataset path: %s\n", dataset2->path);
+    PRINT("", "Dataset num faces: %d\n", dataset2->num_faces);
+    PRINT("", "Dataset num eigenfaces: %d\n", dataset2->num_eigenfaces);
+    PRINT("", "Dataset w: %d\n", dataset2->w);
+    PRINT("", "Dataset h: %d\n", dataset2->h);
 
     free_dataset(dataset2);
 
