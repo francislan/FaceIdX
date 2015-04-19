@@ -7,6 +7,9 @@
 #include "eigen.h"
 #include "database.h"
 
+void display_menu(struct Dataset *dataset);
+int get_user_choice();
+
 int main(int argc, char **argv)
 {
     cudaDeviceProp prop;
@@ -30,16 +33,6 @@ int main(int argc, char **argv)
     GPU_CHECKERROR(cudaEventCreate(&start_gpu));
     GPU_CHECKERROR(cudaEventCreate(&end_gpu));
 
-    struct Image *image = load_image("../../Data/nottingham/normalized/f005a.png", 1);
-    if (image->data == NULL) {
-        PRINT("WARN", "file could not be loaded.\n");
-    } else {
-        PRINT("", "Image width: %d, height: %d, comp: %d\n", image->w, image->h, image->comp);
-        PRINT("", "grey: %f\n", GET_PIXEL(image, 0, 0, 0));
-        PRINT("", "grey: %f\n", GET_PIXEL(image, 156, 15, 0));
-    }
-    free_image(image);
-
     //struct Dataset *dataset = create_dataset("../../Data/nottingham/normalized", "./dataset.dat", "Set 1");
     struct Dataset *dataset = create_dataset("../../Data/yale/normalized", "./dataset.dat", "Set 2");
     if (dataset == NULL) {
@@ -49,6 +42,8 @@ int main(int argc, char **argv)
     PRINT("", "Dataset name: %s\n", dataset->name);
     PRINT("", "Dataset path: %s\n", dataset->path);
     PRINT("", "Dataset num_original_images: %d\n", dataset->num_original_images);
+
+    display_menu(dataset);
 /*
     for (int i = 0; i < dataset->num_original_images; i++) {
         PRINT("", "\tImage %d: %s\n", i + 1, dataset->original_images[i]->filename);
@@ -142,3 +137,71 @@ int main(int argc, char **argv)
     GPU_CHECKERROR(cudaEventDestroy(end_gpu));
     return EXIT_SUCCESS;
 }
+
+void display_menu(struct Dataset *dataset)
+{
+    int action = 0;
+
+    do {
+        system("clear");
+        printf("////////////////////////////////////////////////////////////////////////////////\n");
+        printf("///                                 FaceIdX                                  ///\n");
+        printf("////////////////////////////////////////////////////////////////////////////////\n\n\n");
+
+        printf("Current database: ");
+        if (dataset == NULL) {
+            printf(KRED "None");
+        } else {
+            printf(KGRN "%s\n\n", dataset->name);
+            printf(KNRM "Number of eigenfaces: ");
+            printf(KWHT "%d\n", dataset->num_eigenfaces);
+            printf(KNRM "Number of faces: ");
+            printf(KWHT "%d\n", dataset->num_faces);
+        }
+        printf(KNRM, "\n\n");
+
+        printf("===== MENU =====\n\n");
+        printf("1. Create database\n");
+        printf("2. Load database\n");
+        printf("3. Save database to disk\n");
+        printf("4. Add face to database\n");
+        printf("5. Identify face\n");
+        printf("6. Export eigenfaces\n");
+        printf("7. Reconstruct faces\n");
+
+        printf("\n\nYour choice: ");
+
+        action = get_user_choice();
+    } while (!action);
+
+}
+
+int get_user_choice()
+{
+    size_t len = 0;
+    int char_read;
+    char *user_command;
+    char_read = getline(&user_command, &len, stdin);
+    if (char_read == -1) {
+        PRINT("BUG", "Unexpected error.");
+        return 0;
+    }
+    user_command[char_read - 1] = '\0';
+
+    char *p;
+    int tmp = strtol(user_command, &p, 10);
+
+    if (*p != '\0' || (tmp == 0 && errno != 0)) {
+        PRINT("WARN", "Invalid choice!\n");
+        getchar();
+        return 0;
+    } else if (tmp < 1 || tmp > 7) {
+            PRINT("WARN", "Invalid choice!\n");
+            getchar();
+            return 0;
+    } else {
+        return tmp;
+    }
+}
+
+
