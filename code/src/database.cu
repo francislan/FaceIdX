@@ -48,7 +48,7 @@ void free_face(struct FaceCoordinates *face)
     free(face);
 }
 
-struct Dataset * create_dataset(const char *directory, const char *dataset_path, const char *name)
+struct Dataset * create_dataset(const char *directory, const char *name)
 {
     char * line = NULL;
     size_t len = 0;
@@ -66,16 +66,11 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
         exit(EXIT_FAILURE);
     }
 
-    while (getline(&line, &len, fp) != -1) {
-        if (strstr(line, "No such file or directory") || strstr(line, "not found")) {
-            PRINT("WARN", "No such directory.\n");
-            goto end;
-        }
+    while (getline(&line, &len, fp) != -1)
         num_images++;
-    }
 
     if (!num_images) {
-        PRINT("WARN", "No image in directory.\n");
+        PRINT("WARN", "No such directory or no image in directory.\n");
         goto end;
     }
 
@@ -88,7 +83,7 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
 
     TEST_MALLOC(dataset);
     strcpy(dataset->name, name);
-    dataset->path = dataset_path;
+    dataset->path = "";
     dataset->num_original_images = num_images;
     dataset->original_images = (struct Image **)malloc(num_images * sizeof(struct Image *));
     TEST_MALLOC(dataset->original_images);
@@ -114,7 +109,7 @@ struct Dataset * create_dataset(const char *directory, const char *dataset_path,
             }
         }
         i++;
-        PRINT("DEBUG", "filename: %s\n", dataset->original_images[i-1]->filename);
+        PRINT("DEBUG", "Loading file: %s\n", dataset->original_images[i-1]->filename);
     }
     dataset->w = w;
     dataset->h = h;

@@ -9,6 +9,7 @@
 
 void display_menu(struct Dataset *dataset);
 int get_user_choice();
+void get_user_string(char **s);
 
 int main(int argc, char **argv)
 {
@@ -33,8 +34,8 @@ int main(int argc, char **argv)
     GPU_CHECKERROR(cudaEventCreate(&start_gpu));
     GPU_CHECKERROR(cudaEventCreate(&end_gpu));
 
-    //struct Dataset *dataset = create_dataset("../../Data/nottingham/normalized", "./dataset.dat", "Set 1");
-    struct Dataset *dataset = create_dataset("../../Data/yale/normalized", "./dataset.dat", "Set 2");
+    //struct Dataset *dataset = create_dataset("../../Data/nottingham/normalized", "Set 1");
+    struct Dataset *dataset = create_dataset("../../Data/yale/normalized", "Set 2");
     if (dataset == NULL) {
         PRINT("BUG","Dataset creation failed\n");
         return EXIT_FAILURE;
@@ -43,7 +44,64 @@ int main(int argc, char **argv)
     PRINT("", "Dataset path: %s\n", dataset->path);
     PRINT("", "Dataset num_original_images: %d\n", dataset->num_original_images);
 
-    display_menu(dataset);
+    int action = 0;
+    // Do not forget to free them
+    char *path = NULL;
+    char *dataset_name = NULL;
+    do {
+        display_menu(dataset);
+        action = get_user_choice();
+
+        switch(action) {
+        case 1:
+            printf("\nEnter path to a repo containing images: ");
+            get_user_string(&path);
+            printf("\nEnter a name for the database: ");
+            get_user_string(&dataset_name);
+            printf("\nCreating database...\n\n");
+            if (dataset != NULL)
+                free_dataset(dataset);
+            dataset = create_dataset(path, dataset_name);
+            if (dataset)
+                printf("Done!");
+            break;
+
+        case 2:
+            printf("\nEnter path to a .dat file: ");
+            get_user_string(&path);
+            printf("\nLoading database...\n\n");
+            if (dataset != NULL)
+                free_dataset(dataset);
+            dataset = load_dataset(path);
+            if (dataset)
+                printf("Done!");
+            break;
+
+        case 3:
+            if (dataset == NULL) {
+                PRINT("WARN", "No database is currently loaded!\n");
+                break;
+            }
+            printf("Enter path to a repo in which %s.dat will be saved: ", dataset->name);
+            get_user_string(&path);
+            printf("\nSaving database...\n\n");
+            path = (char *)realloc(path, (strlen(path) + strlen(dataset->name) + 6) * sizeof(char));
+            TEST_MALLOC(path);
+            strcat(path, "/");
+            strcat(path, dataset->name);
+            strcat(path, ".dat");
+            save_dataset_to_disk(dataset, path);
+            printf("Done!");
+            break;
+
+        case 8:
+            printf("Good bye!\n");
+            break;
+        default:
+            break;
+        }
+        getchar();
+    } while (action != 8);
 /*
     for (int i = 0; i < dataset->num_original_images; i++) {
         PRINT("", "\tImage %d: %s\n", i + 1, dataset->original_images[i]->filename);
@@ -138,42 +196,38 @@ int main(int argc, char **argv)
     return EXIT_SUCCESS;
 }
 
+
 void display_menu(struct Dataset *dataset)
 {
-    int action = 0;
+    system("clear");
+    printf("////////////////////////////////////////////////////////////////////////////////\n");
+    printf("///                                 FaceIdX                                  ///\n");
+    printf("////////////////////////////////////////////////////////////////////////////////\n\n\n");
 
-    do {
-        system("clear");
-        printf("////////////////////////////////////////////////////////////////////////////////\n");
-        printf("///                                 FaceIdX                                  ///\n");
-        printf("////////////////////////////////////////////////////////////////////////////////\n\n\n");
+    printf("Current database: ");
+    if (dataset == NULL) {
+        printf(KRED "None");
+    } else {
+        printf(KGRN "%s\n\n", dataset->name);
+        printf(KNRM "Number of original images: ");
+        printf(KWHT "%d\n", dataset->num_original_images);
+        printf(KNRM "Number of eigenfaces: ");
+        printf(KWHT "%d\n", dataset->num_eigenfaces);
+        printf(KNRM "Number of faces: ");
+        printf(KWHT "%d\n", dataset->num_faces);
+    }
 
-        printf("Current database: ");
-        if (dataset == NULL) {
-            printf(KRED "None");
-        } else {
-            printf(KGRN "%s\n\n", dataset->name);
-            printf(KNRM "Number of eigenfaces: ");
-            printf(KWHT "%d\n", dataset->num_eigenfaces);
-            printf(KNRM "Number of faces: ");
-            printf(KWHT "%d\n", dataset->num_faces);
-        }
-        printf(KNRM, "\n\n");
+    printf(KNRM "\n\n===== MENU =====\n\n");
+    printf("1. Create database\n");
+    printf("2. Load database\n");
+    printf("3. Save database to disk\n");
+    printf("4. Add face to database\n");
+    printf("5. Identify face\n");
+    printf("6. Export eigenfaces\n");
+    printf("7. Reconstruct faces\n");
+    printf("8. Exit\n");
 
-        printf("===== MENU =====\n\n");
-        printf("1. Create database\n");
-        printf("2. Load database\n");
-        printf("3. Save database to disk\n");
-        printf("4. Add face to database\n");
-        printf("5. Identify face\n");
-        printf("6. Export eigenfaces\n");
-        printf("7. Reconstruct faces\n");
-
-        printf("\n\nYour choice: ");
-
-        action = get_user_choice();
-    } while (!action);
-
+    printf("\nYour choice: ");
 }
 
 int get_user_choice()
@@ -193,15 +247,24 @@ int get_user_choice()
 
     if (*p != '\0' || (tmp == 0 && errno != 0)) {
         PRINT("WARN", "Invalid choice!\n");
-        getchar();
         return 0;
-    } else if (tmp < 1 || tmp > 7) {
+    } else if (tmp < 1 || tmp > 8) {
             PRINT("WARN", "Invalid choice!\n");
-            getchar();
-            return 0;
-    } else {
-        return tmp;
+            tmp = 0;
     }
+
+    free(user_command);
+    return tmp;
 }
 
-
+void get_user_string(char **s)
+{
+    size_t len = 0;
+    int char_read;
+    char_read = getline(s, &len, stdin);
+    if (char_read == -1) {
+        PRINT("BUG", "Unexpected error.");
+        return;
+    }
+    (*s)[char_read - 1] = '\0';
+}

@@ -41,7 +41,7 @@ struct Dataset {
 struct Image * load_image(const char *filename, int req_comp);
 void free_image(struct Image *image);
 void free_face(struct FaceCoordinates *face);
-struct Dataset * create_dataset(const char *directory, const char *dataset_path, const char *name);
+struct Dataset * create_dataset(const char *directory, const char *name);
 int save_dataset_to_disk(struct Dataset *dataset, const char *path);
 void free_dataset(struct Dataset *dataset);
 void save_image_to_disk(struct Image *image, const char *name);
