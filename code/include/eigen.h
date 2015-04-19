@@ -13,7 +13,7 @@ static void gpuCheckError(cudaError_t err,
     }
 }
 
-
+struct Dataset * create_dataset_and_compute_all(const char *path, const char *name);
 void normalize_cpu(float *array, int size);
 struct Image * compute_average_cpu(struct Dataset * dataset);
 struct Image * compute_average_gpu(struct Dataset * dataset);

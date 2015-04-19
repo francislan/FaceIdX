@@ -10,6 +10,83 @@
 
 #define THREADS_PER_BLOCK 256
 
+struct Dataset * create_dataset_and_compute_all(const char *path, const char *name)
+{
+    printf("\nCreating database...\n\n");
+    struct Dataset *dataset = create_dataset(path, name);
+    if (dataset == NULL) {
+        PRINT("BUG","Dataset creation failed\n");
+        return NULL;
+    }
+    printf("\nCreating database... Done!\n\n");
+    cudaEvent_t start_cpu, end_cpu, start_gpu, end_gpu;
+    float time_for_cpu, time_for_gpu;
+    FILE *f = fopen("timer_log.txt", "w");
+    if(f == NULL) {
+        PRINT("BUG", "Error opening timer_log.txt file!\n");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Computing average... ");
+    GPU_CHECKERROR(cudaEventCreate(&start_cpu));
+    GPU_CHECKERROR(cudaEventCreate(&end_cpu));
+    GPU_CHECKERROR(cudaEventCreate(&start_gpu));
+    GPU_CHECKERROR(cudaEventCreate(&end_gpu));
+    GPU_CHECKERROR(cudaEventRecord(start_cpu, 0));
+    struct Image *average = compute_average_cpu(dataset);
+    GPU_CHECKERROR(cudaEventRecord(end_cpu, 0));
+    GPU_CHECKERROR(cudaEventSynchronize(end_cpu));
+    GPU_CHECKERROR(cudaEventElapsedTime(&time_for_cpu, start_cpu, end_cpu));
+    fprintf(f, "Time taken for computing average face on cpu: %3.1f ms\n", time_for_cpu);
+    if (average == NULL) {
+        PRINT("BUG","\naverage computation failed\n");
+        return NULL;
+    }
+    printf("Done!\n");
+
+    save_image_to_disk(average, "average_cpu.png");
+
+    // Eigenfaces
+    printf("Computing eigenfaces...\n");
+    compute_eigenfaces_cpu(dataset, dataset->num_original_images);
+    //compute_eigenfaces_cpu(dataset, 50);
+    printf("Computing eigenfaces... Done!\n");
+
+    printf("Compute images coordinates...\n");
+    compute_weighs_cpu(dataset);
+    printf("Compute images coordinates... Done!\n");
+    /*for (int i = 0; i < dataset->num_faces; i++)
+        PRINT("INFO", "The Closest match of %s is %s.\n", dataset->faces[i]->name, get_closest_match_cpu(dataset, dataset->faces[i])->name);
+*/
+  //  save_dataset_to_disk(dataset, "dataset1.dat");
+
+
+    GPU_CHECKERROR(cudaEventRecord(start_gpu, 0));
+    struct Image *average_gpu = compute_average_gpu(dataset);
+
+    GPU_CHECKERROR(cudaEventRecord(end_gpu, 0));
+    GPU_CHECKERROR(cudaEventSynchronize(end_gpu));
+    GPU_CHECKERROR(cudaEventElapsedTime(&time_for_gpu, start_gpu, end_gpu));
+    fprintf(f, "Time taken for computing average face on gpu: %3.1f ms\n", time_for_gpu);
+    // not working, has to find another way to test average
+    if (average_gpu == NULL) {
+        PRINT("BUG","average computation failed\n");
+        return NULL;
+    }
+    //PRINT("", "grey 0, 0: %f\n", GET_PIXEL(average_gpu, 0, 0, 0));
+    //PRINT("", "grey 156, 15: %f\n", GET_PIXEL(average_gpu, 156, 15, 0));
+
+    save_image_to_disk(average_gpu, "average_gpu.png");
+
+    fclose(f);
+
+    GPU_CHECKERROR(cudaEventDestroy(start_cpu));
+    GPU_CHECKERROR(cudaEventDestroy(end_cpu));
+    GPU_CHECKERROR(cudaEventDestroy(start_gpu));
+    GPU_CHECKERROR(cudaEventDestroy(end_gpu));
+    return dataset;
+}
+
 void normalize_cpu(float *array, int size)
 {
     float mean = 0;

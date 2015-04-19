@@ -367,7 +367,6 @@ void save_reconstructed_face_to_disk(struct Dataset *dataset, struct FaceCoordin
     for (int j = 0; j < image->w * image->h; j++)
         image->data[j] += dataset->average->data[j];
 
-
     float min = image->data[0];
     float max = image->data[0];
     for (int j = 1; j < image->w * image->h; j++) {
