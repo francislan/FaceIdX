@@ -57,10 +57,8 @@ struct Image * compute_average_cpu(struct Dataset * dataset)
         }
     }
 
-    // Normalize
-    normalize_cpu(average->data, w * h);
-    for (int i = 0; i < 100; i++)
-        PRINT("DEBUG", "Average: %f\n", average->data[i]);
+    // Normalize?
+    //normalize_cpu(average->data, w * h);
     dataset->average = average;
     return average;
 }
@@ -169,7 +167,7 @@ void jacobi_cpu(const float *a, const int n, float *v, float *e)
 {
     int p, q, flag, t = 0;
     float temp;
-    float theta, zero = 1e-6, max, pi = 3.141592654, c, s;
+    float theta, zero = 1e-5, max, pi = 3.141592654, c, s;
     float *d = (float *)malloc(n * n * sizeof(float));
     for (int i = 0; i < n * n; i++)
         d[i] = a[i];
@@ -271,7 +269,8 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
     struct Image *average = dataset->average;
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < w * h; j++)
-            images_minus_average[i][j] = (images_minus_average[i][j] - average->data[j]) * 1000; // otherwise the dot product will be too small and jocobi will fail
+            //images_minus_average[i][j] = (images_minus_average[i][j] - average->data[j]) * 1000; // otherwise the dot product will be too small and jocobi will fail
+            images_minus_average[i][j] = images_minus_average[i][j] - average->data[j];
         // Normalize images_minus_average
 	// normalize_cpu(...);
     }
@@ -300,26 +299,17 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
     jacobi_cpu(covariance_matrix, n, eigenfaces, eigenvalues);
     PRINT("DEBUG", "Computing eigenfaces... done\n");
 
-    // Check eigenvectors are correct
-    PRINT("DEBUG", "Eigenvalues are:\n");
-    for (int i = 0; i < n; i++) {
-        printf("%f ", eigenvalues[2*i+0]);
-    }
-
-    for (int i = 0; i < n; i++) {
-        float temp = 0;
-        for (int j = 0; j < n; j++)
-            temp += covariance_matrix[i * n + j] * eigenfaces[j * n + 1];
-        PRINT("DEBUG", "%f %f\n", eigenvalues[2*1+0], eigenfaces[i * n + 1]);
-        PRINT("DEBUG", "C*v %d = %f, lambda * v %d = %f\n", i, temp, i, eigenvalues[2*1+0] * eigenfaces[i * n + 1]);
-    }
-
 
     // Keep only top num_to_keep eigenfaces.
     // Assumes num_to_keep is in the correct range.
+    int num_eigenvalues_not_zero = 0;
     qsort(eigenvalues, n, 2 * sizeof(float), comp_eigenvalues);
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         PRINT("DEBUG", "Eigenvalue #%d (index %d): %f\n", i, (int)eigenvalues[2 * i + 1], eigenvalues[2 * i]);
+        if (eigenvalues[2 * i] > 0.5)
+            num_eigenvalues_not_zero++;
+    }
+    num_to_keep = num_eigenvalues_not_zero;
 
     // Convert size n eigenfaces to size w*h
     dataset->num_eigenfaces = num_to_keep;
@@ -406,7 +396,7 @@ void compute_weighs_cpu(struct Dataset *dataset)
                                                 dataset->eigenfaces[j]->data, w * h);
 
         // Normalize?
-        normalize_cpu(current_face->coordinates, num_eigens);
+        //normalize_cpu(current_face->coordinates, num_eigens);
 
         for (int j = 0; j < num_eigens; j++)
             printf("%f ", current_face->coordinates[j]);

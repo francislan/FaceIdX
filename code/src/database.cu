@@ -25,7 +25,7 @@ struct Image * load_image(const char *filename, int req_comp)
 
     for (int j = 0; j < image->w * image->h; j++)
         image->data[j] = image_data[j];
-    normalize_cpu(image->data, image->w * image->h);
+    //normalize_cpu(image->data, image->w * image->h);
 
     stbi_image_free(image_data);
     return image;

@@ -40,7 +40,8 @@ int main(int argc, char **argv)
     }
     free_image(image);
 
-    struct Dataset *dataset = create_dataset("../../Data/nottingham/normalized", "./dataset.dat", "Set 1");
+    //struct Dataset *dataset = create_dataset("../../Data/nottingham/normalized", "./dataset.dat", "Set 1");
+    struct Dataset *dataset = create_dataset("../../Data/yale/normalized", "./dataset.dat", "Set 2");
     if (dataset == NULL) {
         PRINT("BUG","Dataset creation failed\n");
         return EXIT_FAILURE;
@@ -74,8 +75,8 @@ int main(int argc, char **argv)
 
     // Eigenfaces
     PRINT("INFO", "Start eigenfaces computation\n");
-    //compute_eigenfaces_cpu(dataset, dataset->num_original_images);
-    compute_eigenfaces_cpu(dataset, 50);
+    compute_eigenfaces_cpu(dataset, dataset->num_original_images);
+    //compute_eigenfaces_cpu(dataset, 50);
     PRINT("INFO", "End eigenfaces computation\n");
     char name[100]= "";
     for (int i = 0; i < dataset->num_eigenfaces; i++) {
