@@ -48,6 +48,7 @@ void free_dataset(struct Dataset *dataset);
 void save_image_to_disk(struct Image *image, const char *name);
 void save_reconstructed_face_to_disk(struct Dataset *dataset, struct FaceCoordinates *face, int num_eigenfaces);
 int add_faces_and_compute_coordinates(struct Dataset *dataset, const char *path);
-
+void identify_face(struct Dataset *dataset, const char *path);
+void get_user_string(char **s);
 
 #endif

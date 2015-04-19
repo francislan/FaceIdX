@@ -79,13 +79,25 @@ int main(int argc, char **argv)
                 PRINT("WARN", "No database is currently loaded!\n");
                 break;
             }
-            printf("Enter path to a repo containing new face(s) or path to a simple face: ");
+            printf("Enter path to a repo containing new face(s) or path to a single face: ");
             get_user_string(&path);
             printf("\nAdding face(s)...\n");
 
             tmp = add_faces_and_compute_coordinates(dataset, path);
             if (tmp)
                 printf("Adding face(s)... Done! (%d faces added)", tmp);
+            break;
+
+        case 5:
+            if (dataset == NULL) {
+                PRINT("WARN", "No database is currently loaded!\n");
+                break;
+            }
+            printf("Enter path to a face to identify: ");
+            get_user_string(&path);
+            printf("\nIdentifying face...\n");
+            identify_face(dataset, path);
+            printf("\nIdentifying face... Done!");
             break;
 
         case 6:
@@ -143,13 +155,15 @@ void display_menu(struct Dataset *dataset)
         printf(KWHT "%d\n", dataset->num_eigenfaces);
         printf(KNRM "Number of faces: ");
         printf(KWHT "%d\n", dataset->num_faces);
+        printf(KNRM "Number of new faces: ");
+        printf(KWHT "%d\n", dataset->num_new_faces);
     }
 
     printf(KNRM "\n\n===== MENU =====\n\n");
     printf("1. Create database\n");
     printf("2. Load database\n");
     printf("3. Save database to disk\n");
-    printf("4. Add face to database\n");
+    printf("4. Add face(s) to database\n");
     printf("5. Identify face\n");
     printf("6. Export eigenfaces\n");
     printf("7. Reconstruct faces\n");
@@ -183,16 +197,4 @@ int get_user_choice()
 
     free(user_command);
     return tmp;
-}
-
-void get_user_string(char **s)
-{
-    size_t len = 0;
-    int char_read;
-    char_read = getline(s, &len, stdin);
-    if (char_read == -1) {
-        PRINT("BUG", "Unexpected error.");
-        return;
-    }
-    (*s)[char_read - 1] = '\0';
 }

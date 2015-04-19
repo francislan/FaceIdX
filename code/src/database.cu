@@ -238,6 +238,9 @@ struct Dataset * load_dataset(const char *path)
 }
 
 // Call this only if dataset is well defined (not NULL, average computed, etc)
+// Known bug: if saving to an existing file, the program doesn't know how
+// many faces are already there, it will only save the ones that have been
+// added since the last loading/creation of the database
 int save_dataset_to_disk(struct Dataset *dataset, const char *path)
 {
     // No safe, TOCTOU, etc
@@ -249,6 +252,7 @@ int save_dataset_to_disk(struct Dataset *dataset, const char *path)
             return 1;
         }
         for (int i = dataset->num_faces - dataset->num_new_faces; i < dataset->num_faces; i++) {
+            fwrite("\0", sizeof(char), 1, f);
             struct FaceCoordinates *face = dataset->faces[i];
             fwrite(face->name, sizeof(char), strlen(face->name), f);
             fwrite("\0", sizeof(char), 1, f);
@@ -295,6 +299,7 @@ int save_dataset_to_disk(struct Dataset *dataset, const char *path)
             if (i < dataset->num_faces - 1)
                 fwrite("\0", sizeof(char), 1, f);
         }
+        dataset->num_new_faces = 0;
         fclose(f);
     }
     return 0;
@@ -407,8 +412,9 @@ int add_faces_and_compute_coordinates(struct Dataset *dataset, const char *path)
             return 0;
         }
         struct Image *image = load_image(path, 1);
-        compute_weighs_cpu(dataset, &image, 1);
+        compute_weighs_cpu(dataset, &image, 1, 1);
         dataset->num_new_faces++;
+        free_image(image);
         return 1;
     }
 
@@ -454,7 +460,7 @@ int add_faces_and_compute_coordinates(struct Dataset *dataset, const char *path)
         i++;
         PRINT("DEBUG", "Loading file: %s\n", images[i-1]->filename);
     }
-    compute_weighs_cpu(dataset, images, num_images);
+    compute_weighs_cpu(dataset, images, num_images, 1);
     dataset->num_new_faces += num_images;
 
 end:
@@ -467,4 +473,55 @@ end:
         free(images);
     }
     return num_images;
+}
+
+void identify_face(struct Dataset *dataset, const char *path)
+{
+    char *answer;
+    if (access(path, F_OK) == -1) {
+        PRINT("WARN", "Cannot access file %s!\n", path);
+        return;
+    }
+    struct Image *image = load_image(path, 1);
+    struct FaceCoordinates **faces = compute_weighs_cpu(dataset, &image, 1, 0);
+    struct FaceCoordinates *face = faces[0];
+    struct FaceCoordinates *closest = get_closest_match_cpu(dataset, face);
+    if (closest == NULL) {
+        printf("No match found!\n\n");
+    } else {
+        printf("Match found: %s\n\n", closest->name);
+        strcpy(face->name, closest->name);
+    }
+    printf("Would you like to add the new face into the database [y/n]? ");
+    get_user_string(&answer);
+
+    if (!strcmp(answer, "y") || !strcmp(answer, "Y")) {
+        printf("Enter name for the new face (leave blank to use '%s'): ", face->name);
+        get_user_string(&answer);
+        if (strlen(answer) != 0)
+            strcpy(face->name, answer);
+        dataset->faces = (struct FaceCoordinates **)realloc(dataset->faces, (dataset->num_faces + 1) * sizeof(struct FaceCoordinates *));
+        TEST_MALLOC(dataset->faces);
+        dataset->faces[dataset->num_faces] = face;
+        dataset->num_faces++;
+        dataset->num_new_faces++;
+    } else {
+        free_face(face);
+    }
+    free(answer);
+    free_image(image);
+    free(faces);
+
+}
+
+void get_user_string(char **s)
+{
+    size_t len = 0;
+    int char_read;
+    char_read = getline(s, &len, stdin);
+    if (char_read == -1) {
+        PRINT("BUG", "Unexpected error.");
+        return;
+    }
+    (*s)[char_read - 1] = '\0';
 }
