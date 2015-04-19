@@ -42,11 +42,12 @@ struct Image * load_image(const char *filename, int req_comp);
 void free_image(struct Image *image);
 void free_face(struct FaceCoordinates *face);
 struct Dataset * create_dataset(const char *directory, const char *name);
+struct Dataset * load_dataset(const char *dataset_path);
 int save_dataset_to_disk(struct Dataset *dataset, const char *path);
 void free_dataset(struct Dataset *dataset);
 void save_image_to_disk(struct Image *image, const char *name);
 void save_reconstructed_face_to_disk(struct Dataset *dataset, struct FaceCoordinates *face, int num_eigenfaces);
+int add_faces_and_compute_coordinates(struct Dataset *dataset, const char *path);
 
-struct Dataset * load_dataset(const char *dataset_path);
 
 #endif

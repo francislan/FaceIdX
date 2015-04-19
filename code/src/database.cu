@@ -255,6 +255,7 @@ int save_dataset_to_disk(struct Dataset *dataset, const char *path)
             for (int j = 0; j < face->num_eigenfaces; j++)
                 fwrite(&(face->coordinates[j]), sizeof(float), 1, f);
         }
+        dataset->num_new_faces = 0;
         fclose(f);
     } else {
         FILE *f = fopen(path, "wb");
@@ -384,4 +385,86 @@ void save_reconstructed_face_to_disk(struct Dataset *dataset, struct FaceCoordin
     sprintf(image->filename, "reconstructed/%s_with_%d.png", face->name, n);
     save_image_to_disk(image, image->filename);
     free_image(image);
+}
+
+// Expects dataset != NULL
+// Returns the number of faces added
+int add_faces_and_compute_coordinates(struct Dataset *dataset, const char *path)
+{
+    char *line = NULL;
+    size_t len = 0;
+    int num_images = 0;
+    int num_allocated = 0;
+    int w = dataset->w;
+    int h = dataset->h;
+    int i = 0;
+    struct Image **images = NULL;
+    char command[200] = ""; // careful buffer overflow
+
+    if (strstr(path, ".png")) {
+        if(access(path, F_OK) == -1 ) {
+            PRINT("WARN", "Cannot access file %s!\n", path);
+            return 0;
+        }
+        struct Image *image = load_image(path, 1);
+        compute_weighs_cpu(dataset, &image, 1);
+        dataset->num_new_faces++;
+        return 1;
+    }
+
+    // Case path is a directory
+    sprintf(command, "ls %s | grep png", path);
+
+    FILE *fp = popen(command, "r");
+    if (fp == NULL) {
+        PRINT("BUG", "Cannot scan directory!\n");
+        exit(EXIT_FAILURE);
+    }
+
+    while (getline(&line, &len, fp) != -1)
+        num_images++;
+
+    if (!num_images) {
+        PRINT("WARN", "No such directory or no image in directory.\n");
+        goto end;
+    }
+
+    PRINT("INFO", "%d images found in directory.\n", num_images);
+
+    fclose(fp);
+    fp = popen(command, "r"); // run the command twice, not optimal, and possible exploit
+    num_allocated = num_images;
+    images = (struct Image **)malloc(num_allocated * sizeof(struct Image *));
+    TEST_MALLOC(images);
+
+    while (getline(&line, &len, fp) != -1) {
+        if (line[strlen(line) - 1] == '\n')
+            line[strlen(line) - 1 ] = '\0';
+        char image_name[100] = "";
+        strcpy(image_name, path);
+        strcat(image_name, "/");
+        strcat(image_name, line);
+        images[i] = load_image(image_name, 1);
+	strcpy(images[i]->filename, line); // possible buffer overflow
+        if (w != images[i]->w || h != images[i]->h) {
+                PRINT("WARN", "Images in directory have different width and/or height. Aborting\n");
+                num_images = 0;
+                goto end;
+        }
+        i++;
+        PRINT("DEBUG", "Loading file: %s\n", images[i-1]->filename);
+    }
+    compute_weighs_cpu(dataset, images, num_images);
+    dataset->num_new_faces += num_images;
+
+end:
+    fclose(fp);
+    if (line)
+        free(line);
+    if (images) {
+        for (int i = 0; i < num_allocated; i++)
+            free_image(images[i]);
+        free(images);
+    }
+    return num_images;
 }

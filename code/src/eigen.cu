@@ -53,7 +53,7 @@ struct Dataset * create_dataset_and_compute_all(const char *path, const char *na
     printf("Computing eigenfaces... Done!\n");
 
     printf("Compute images coordinates...\n");
-    compute_weighs_cpu(dataset);
+    compute_weighs_cpu(dataset, dataset->original_images, dataset->num_original_images);
     printf("Compute images coordinates... Done!\n");
     /*for (int i = 0; i < dataset->num_faces; i++)
         PRINT("INFO", "The Closest match of %s is %s.\n", dataset->faces[i]->name, get_closest_match_cpu(dataset, dataset->faces[i])->name);
@@ -438,25 +438,26 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
     return 0;
 }
 
-void compute_weighs_cpu(struct Dataset *dataset)
+// Assumes images is valid and dataset not NULL
+void compute_weighs_cpu(struct Dataset *dataset, struct Image **images, int k)
 {
     int w = dataset->w;
     int h = dataset->h;
     int num_eigens = dataset->num_eigenfaces;
-    int n = dataset->num_original_images;
+    int n = dataset->num_faces;
 
-    dataset->faces = (struct FaceCoordinates **)malloc(n * sizeof(struct FaceCoordinates *));
+    dataset->faces = (struct FaceCoordinates **)realloc(dataset->faces, (n + k) * sizeof(struct FaceCoordinates *));
     TEST_MALLOC(dataset->faces);
-    dataset->num_faces = n;
+    dataset->num_faces = n + k;
 
-    for (int i= 0; i < n; i++) {
+    for (int i = n; i < n + k; i++) {
         dataset->faces[i] = (struct FaceCoordinates *)malloc(sizeof(struct FaceCoordinates));
         TEST_MALLOC(dataset->faces[i]);
     }
 
-    for (int i = 0; i < n; i++) {
+    for (int i = n; i < n + k; i++) {
         struct FaceCoordinates *current_face = dataset->faces[i];
-        struct Image *current_image = dataset->original_images[i];
+        struct Image *current_image = images[i - n];
         strcpy(current_face->name, current_image->filename);
         char *c = strrchr(current_face->name, '.');
         if (c)

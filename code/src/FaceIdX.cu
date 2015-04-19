@@ -28,6 +28,7 @@ int main(int argc, char **argv)
     // Do not forget to free them
     char *path = NULL;
     char *dataset_name = NULL;
+    int tmp;
     do {
         display_menu(dataset);
         action = get_user_choice();
@@ -71,6 +72,20 @@ int main(int argc, char **argv)
             strcat(path, ".dat");
             save_dataset_to_disk(dataset, path);
             printf("Done!");
+            break;
+
+        case 4:
+            if (dataset == NULL) {
+                PRINT("WARN", "No database is currently loaded!\n");
+                break;
+            }
+            printf("Enter path to a repo containing new face(s) or path to a simple face: ");
+            get_user_string(&path);
+            printf("\nAdding face(s)...\n");
+
+            tmp = add_faces_and_compute_coordinates(dataset, path);
+            if (tmp)
+                printf("Adding face(s)... Done! (%d faces added)", tmp);
             break;
 
         case 6:
