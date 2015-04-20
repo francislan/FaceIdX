@@ -12,48 +12,56 @@
 
 struct Dataset * create_dataset_and_compute_all(const char *path, const char *name)
 {
-    printf("\nCreating database...\n\n");
-    struct Dataset *dataset = create_dataset(path, name);
-    if (dataset == NULL) {
-        PRINT("BUG","Dataset creation failed\n");
-        return NULL;
-    }
-    printf("\nCreating database... Done!\n\n");
-    cudaEvent_t start_cpu, end_cpu, start_gpu, end_gpu;
-    float time_for_cpu, time_for_gpu;
+    struct Timer timer_cpu, timer_gpu;
+    INITIALIZE_TIMER(timer_cpu);
+    INITIALIZE_TIMER(timer_gpu);
     FILE *f = fopen("timer_log.txt", "w");
     if(f == NULL) {
         PRINT("BUG", "Error opening timer_log.txt file!\n");
         exit(EXIT_FAILURE);
     }
 
+    START_TIMER(timer_cpu);
+    printf("\nCreating database...\n\n");
+    struct Dataset *dataset = create_dataset(path, name);
+    STOP_TIMER(timer_cpu);
+    fprintf(f, "Time taken for creating database on cpu: %3.1f ms\n", timer_cpu.time);
+    if (dataset == NULL) {
+        PRINT("BUG","Dataset creation failed\n");
+        return NULL;
+    }
+    printf("\nCreating database... Done!\n\n");
+
     printf("Computing average... ");
-    GPU_CHECKERROR(cudaEventCreate(&start_cpu));
-    GPU_CHECKERROR(cudaEventCreate(&end_cpu));
-    GPU_CHECKERROR(cudaEventCreate(&start_gpu));
-    GPU_CHECKERROR(cudaEventCreate(&end_gpu));
-    GPU_CHECKERROR(cudaEventRecord(start_cpu, 0));
+    START_TIMER(timer_cpu);
     struct Image *average = compute_average_cpu(dataset);
-    GPU_CHECKERROR(cudaEventRecord(end_cpu, 0));
-    GPU_CHECKERROR(cudaEventSynchronize(end_cpu));
-    GPU_CHECKERROR(cudaEventElapsedTime(&time_for_cpu, start_cpu, end_cpu));
-    fprintf(f, "Time taken for computing average face on cpu: %3.1f ms\n", time_for_cpu);
+    STOP_TIMER(timer_cpu);
+    fprintf(f, "Time taken for computing average face on cpu: %3.1f ms\n", timer_cpu.time);
     if (average == NULL) {
         PRINT("BUG","\naverage computation failed\n");
         return NULL;
     }
     printf("Done!\n");
 
+    START_TIMER(timer_cpu);
     save_image_to_disk(average, "average_cpu.png");
+    STOP_TIMER(timer_cpu);
+    fprintf(f, "Time taken for saving average on disk on cpu: %3.1f ms\n", timer_cpu.time);
 
     // Eigenfaces
     printf("Computing eigenfaces...\n");
+    START_TIMER(timer_cpu);
     compute_eigenfaces_cpu(dataset, dataset->num_original_images);
     //compute_eigenfaces_cpu(dataset, 50);
+    STOP_TIMER(timer_cpu);
+    fprintf(f, "Time taken for computing eigenfaces on cpu: %3.1f ms\n", timer_cpu.time);
     printf("Computing eigenfaces... Done!\n");
 
     printf("Compute images coordinates...\n");
+    START_TIMER(timer_cpu);
     compute_weighs_cpu(dataset, dataset->original_images, dataset->num_original_images, 1);
+    STOP_TIMER(timer_cpu);
+    fprintf(f, "Time taken for computing weighs on cpu: %3.1f ms\n", timer_cpu.time);
     printf("Compute images coordinates... Done!\n");
     /*for (int i = 0; i < dataset->num_faces; i++)
         PRINT("INFO", "The Closest match of %s is %s.\n", dataset->faces[i]->name, get_closest_match_cpu(dataset, dataset->faces[i])->name);
@@ -61,13 +69,11 @@ struct Dataset * create_dataset_and_compute_all(const char *path, const char *na
   //  save_dataset_to_disk(dataset, "dataset1.dat");
 
 
-    GPU_CHECKERROR(cudaEventRecord(start_gpu, 0));
+    START_TIMER(timer_gpu);
     struct Image *average_gpu = compute_average_gpu(dataset);
+    STOP_TIMER(timer_gpu);
 
-    GPU_CHECKERROR(cudaEventRecord(end_gpu, 0));
-    GPU_CHECKERROR(cudaEventSynchronize(end_gpu));
-    GPU_CHECKERROR(cudaEventElapsedTime(&time_for_gpu, start_gpu, end_gpu));
-    fprintf(f, "Time taken for computing average face on gpu: %3.1f ms\n", time_for_gpu);
+    fprintf(f, "Time taken for computing average face on gpu: %3.1f ms\n", timer_gpu.time);
     // not working, has to find another way to test average
     if (average_gpu == NULL) {
         PRINT("BUG","average computation failed\n");
@@ -79,11 +85,9 @@ struct Dataset * create_dataset_and_compute_all(const char *path, const char *na
     save_image_to_disk(average_gpu, "average_gpu.png");
 
     fclose(f);
+    FREE_TIMER(timer_cpu);
+    FREE_TIMER(timer_gpu);
 
-    GPU_CHECKERROR(cudaEventDestroy(start_cpu));
-    GPU_CHECKERROR(cudaEventDestroy(end_cpu));
-    GPU_CHECKERROR(cudaEventDestroy(start_gpu));
-    GPU_CHECKERROR(cudaEventDestroy(end_gpu));
     return dataset;
 }
 
@@ -271,8 +275,8 @@ void jacobi_cpu(const float *a, const int n, float *v, float *e)
             }
         if (!flag)
             break;
-        if (t % 1000 == 0)
-            PRINT("DEBUG", "Iteration %d, max = %f\n", t, max);
+        //if (t % 1000 == 0)
+        //    PRINT("DEBUG", "Iteration %d, max = %f\n", t, max);
         t++;
         if(d[p * n + p] == d[q * n + q]) {
             if(d[p * n + q] > 0)
@@ -305,7 +309,7 @@ void jacobi_cpu(const float *a, const int n, float *v, float *e)
 
     }
 
-    printf("Nb of iterations: %d\n", t);
+    //printf("Nb of iterations: %d\n", t);
 /*  printf("The eigenvalues are \n");
     for(int i = 0; i < n; i++)
         printf("%8.5f ", d[i * n + i]);
@@ -382,7 +386,7 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
     int num_eigenvalues_not_zero = 0;
     qsort(eigenvalues, n, 2 * sizeof(float), comp_eigenvalues);
     for (int i = 0; i < n; i++) {
-        PRINT("DEBUG", "Eigenvalue #%d (index %d): %f\n", i, (int)eigenvalues[2 * i + 1], eigenvalues[2 * i]);
+        //PRINT("DEBUG", "Eigenvalue #%d (index %d): %f\n", i, (int)eigenvalues[2 * i + 1], eigenvalues[2 * i]);
         if (eigenvalues[2 * i] > 0.5)
             num_eigenvalues_not_zero++;
     }
@@ -416,7 +420,7 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
         normalize_cpu(dataset->eigenfaces[i]->data, w * h);
     }
     PRINT("DEBUG", "Transforming eigenfaces... done\n");
-
+/*
     // Test if eigenfaces are orthogonal
     for (int i = 0; i < num_to_keep; i++)
         PRINT("DEBUG", "<0|%d> = %f\n", i, dot_product_cpu(dataset->eigenfaces[0]->data, dataset->eigenfaces[i]->data, w * h));
@@ -431,7 +435,7 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
             original_eigenfaces_i[j] = eigenfaces[j * n + i];
         PRINT("DEBUG", "<0|%d> = %f\n", i, dot_product_cpu(original_eigenfaces_5, original_eigenfaces_i, n));
     }
-
+*/
     free(covariance_matrix);
     free(eigenfaces);
     free(eigenvalues);
@@ -459,7 +463,7 @@ struct FaceCoordinates ** compute_weighs_cpu(struct Dataset *dataset, struct Ima
         if (c)
             *c = '\0';
 
-        PRINT("DEBUG", "Name: %s\n", current_face->name);
+        //PRINT("DEBUG", "Name: %s\n", current_face->name);
 
         current_face->num_eigenfaces = num_eigens;
         current_face->coordinates = (float *)malloc(num_eigens * sizeof(float));
@@ -471,10 +475,10 @@ struct FaceCoordinates ** compute_weighs_cpu(struct Dataset *dataset, struct Ima
 
         // Normalize?
         //normalize_cpu(current_face->coordinates, num_eigens);
-
+/*
         for (int j = 0; j < num_eigens; j++)
             printf("%f ", current_face->coordinates[j]);
-        printf("\n");
+        printf("\n");*/
     }
 
     if (add_to_dataset) {
@@ -500,7 +504,7 @@ struct FaceCoordinates * get_closest_match_cpu(struct Dataset *dataset, struct F
         for (int j = 0; j < num_eigens; j++)
             diff[j] = face->coordinates[j] - dataset->faces[i]->coordinates[j];
         float distance = sqrt(dot_product_cpu(diff, diff, num_eigens));
-        PRINT("DEBUG", "Distance between %s and %s is %f\n", face->name, dataset->faces[i]->name, distance);
+        //PRINT("DEBUG", "Distance between %s and %s is %f\n", face->name, dataset->faces[i]->name, distance);
         if (distance < min) {
             min = distance;
             closest = dataset->faces[i];

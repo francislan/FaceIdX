@@ -39,5 +39,29 @@ do { \
 	} \
 } while(0)
 
+struct Timer
+{
+	cudaEvent_t start;
+	cudaEvent_t end;
+	float time;
+};
+
+#define START_TIMER(t) GPU_CHECKERROR(cudaEventRecord(t.start, 0))
+
+#define STOP_TIMER(t) do { \
+    GPU_CHECKERROR(cudaEventRecord(t.end, 0)); \
+    GPU_CHECKERROR(cudaEventSynchronize(t.end)); \
+    GPU_CHECKERROR(cudaEventElapsedTime(&(t.time), t.start, t.end)); \
+} while(0)
+
+#define INITIALIZE_TIMER(t) do { \
+	GPU_CHECKERROR(cudaEventCreate(&(t.start))); \
+	GPU_CHECKERROR(cudaEventCreate(&(t.end))); \
+} while(0)
+
+#define FREE_TIMER(t) do { \
+	GPU_CHECKERROR(cudaEventDestroy(t.start)); \
+	GPU_CHECKERROR(cudaEventDestroy(t.end)); \
+} while(0)
 
 #endif
