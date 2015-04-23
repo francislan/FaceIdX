@@ -634,7 +634,7 @@ int compute_eigenfaces_gpu(struct Dataset * dataset, int num_to_keep)
     START_TIMER(timer);
     for (int i = 0; i < n; i++) {
 
-        dot_product_gpu_kernel<<<dimOfGridUnitary, dimOfBlock>>>(&(dataset->d_original_images[i * w * h]), &(dataset->d_original_images[i * w * h]), n, &covariance_matrix[i * n + i]);
+        dot_product_gpu_kernel<<<dimOfGridUnitary, dimOfBlock>>>(&(dataset->d_original_images[i * w * h]), &(dataset->d_original_images[i * w * h]), w * h, &covariance_matrix[i * n + i]);
         cudaerr = cudaDeviceSynchronize();
         if (cudaerr != CUDA_SUCCESS) {
             PRINT("WARN", "kernel launch failed with error \"%s\"\n",
@@ -643,7 +643,7 @@ int compute_eigenfaces_gpu(struct Dataset * dataset, int num_to_keep)
         }
         covariance_matrix[i * n + i] /= n;
         for (int j = i + 1; j < n; j++) {
-            dot_product_gpu_kernel<<<dimOfGridUnitary, dimOfBlock>>>(&(dataset->d_original_images[i * w * h]), &(dataset->d_original_images[j * w * h]), n, &covariance_matrix[i * n + j]);
+            dot_product_gpu_kernel<<<dimOfGridUnitary, dimOfBlock>>>(&(dataset->d_original_images[i * w * h]), &(dataset->d_original_images[j * w * h]), w * h, &covariance_matrix[i * n + j]);
             cudaerr = cudaDeviceSynchronize();
             if (cudaerr != CUDA_SUCCESS) {
                 PRINT("WARN", "kernel launch failed with error \"%s\"\n",
@@ -739,6 +739,7 @@ int compute_eigenfaces_gpu(struct Dataset * dataset, int num_to_keep)
     free(eigenvalues);
     return 0;
 }
+
 // Assumes images is valid and dataset not NULL
 struct FaceCoordinates ** compute_weighs_cpu(struct Dataset *dataset, struct Image **images, int k, int add_to_dataset)
 {
@@ -760,7 +761,7 @@ struct FaceCoordinates ** compute_weighs_cpu(struct Dataset *dataset, struct Ima
         if (c)
             *c = '\0';
 
-        PRINT("DEBUG", "Name: %s\n", current_face->name);
+        //PRINT("DEBUG", "Name: %s\n", current_face->name);
 
         current_face->num_eigenfaces = num_eigens;
         current_face->coordinates = (float *)malloc(num_eigens * sizeof(float));
@@ -770,9 +771,58 @@ struct FaceCoordinates ** compute_weighs_cpu(struct Dataset *dataset, struct Ima
             current_face->coordinates[j] = dot_product_cpu(current_image->data,
                                                 dataset->eigenfaces[j]->data, w * h);
 
-        for (int j = 0; j < num_eigens; j++)
+        /*for (int j = 0; j < num_eigens; j++)
             printf("%f ", current_face->coordinates[j]);
-        printf("\n");
+        printf("\n");*/
+    }
+
+    if (add_to_dataset) {
+        dataset->faces = (struct FaceCoordinates **)realloc(dataset->faces, (n + k) * sizeof(struct FaceCoordinates *));
+        TEST_MALLOC(dataset->faces);
+        dataset->num_faces = n + k;
+
+        for (int i = n; i < n + k; i++)
+            dataset->faces[i] = new_faces[i - n];
+    }
+    return new_faces;
+}
+
+// Assumes images is valid and dataset not NULL
+// If the images are already loaded on GPU, set images to NULL and use
+// d_images, otherwise set d_images to NULL and use images
+struct FaceCoordinates ** compute_weighs_gpu(struct Dataset *dataset, struct Image **images, float *d_images, int k, int add_to_dataset)
+{
+    int w = dataset->w;
+    int h = dataset->h;
+    int num_eigens = dataset->num_eigenfaces;
+    int n = dataset->num_faces;
+
+    struct FaceCoordinates **new_faces = (struct FaceCoordinates **)malloc(k * sizeof(struct FaceCoordinates *));
+    TEST_MALLOC(new_faces);
+
+    for (int i = 0; i < k; i++) {
+        new_faces[i] = (struct FaceCoordinates *)malloc(sizeof(struct FaceCoordinates));
+        TEST_MALLOC(new_faces[i]);
+        struct FaceCoordinates *current_face = new_faces[i];
+        struct Image *current_image = images[i];
+        strcpy(current_face->name, current_image->filename);
+        char *c = strrchr(current_face->name, '.');
+        if (c)
+            *c = '\0';
+
+        //PRINT("DEBUG", "Name: %s\n", current_face->name);
+
+        current_face->num_eigenfaces = num_eigens;
+        current_face->coordinates = (float *)malloc(num_eigens * sizeof(float));
+        TEST_MALLOC(current_face->coordinates);
+
+        for (int j = 0; j < num_eigens; j++)
+            current_face->coordinates[j] = dot_product_cpu(current_image->data,
+                                                dataset->eigenfaces[j]->data, w * h);
+
+        /*for (int j = 0; j < num_eigens; j++)
+            printf("%f ", current_face->coordinates[j]);
+        printf("\n");*/
     }
 
     if (add_to_dataset) {
