@@ -110,6 +110,8 @@ struct Image * compute_average_cpu(struct Dataset * dataset)
     int w = dataset->w;
     int h = dataset->h;
     int n = dataset->num_original_images;
+    Timer timer;
+    INITIALIZE_TIMER(timer);
 
     if (w <= 0 || h <= 0) {
         PRINT("WARN", "Dataset's width and/or height incorrect(s)\n");
@@ -120,6 +122,7 @@ struct Image * compute_average_cpu(struct Dataset * dataset)
         return NULL;
     }
 
+    START_TIMER(timer);
     struct Image *average = (struct Image *)malloc(sizeof(struct Image));
     TEST_MALLOC(average);
 
@@ -128,7 +131,10 @@ struct Image * compute_average_cpu(struct Dataset * dataset)
     average->comp = 1;
     average->data = (float *)malloc(w * h * sizeof(float));
     TEST_MALLOC(average->data);
+    STOP_TIMER(timer);
+    PRINT("INFO", "Time allocating average Image: %f\n", timer.time);
 
+    START_TIMER(timer);
     for (int x = 0; x < w; x++) {
         for (int y = 0; y < h; y++) {
             float sum = 0;
@@ -137,6 +143,8 @@ struct Image * compute_average_cpu(struct Dataset * dataset)
             average->data[y * w + x + 0] = (sum / n);
         }
     }
+    STOP_TIMER(timer);
+    PRINT("INFO", "Time computing: %f\n", timer.time);
 
     // Normalize?
     //normalize_cpu(average->data, w * h);
@@ -150,6 +158,8 @@ struct Image * compute_average_gpu(struct Dataset * dataset)
     int w = dataset->w;
     int h = dataset->h;
     int n = dataset->num_original_images;
+    Timer timer;
+    INITIALIZE_TIMER(timer);
     printf("entering compute_average_gpu()...\n");
     if (w <= 0 || h <= 0) {
         PRINT("WARN", "Dataset's width and/or height incorrect(s)\n");
@@ -160,46 +170,38 @@ struct Image * compute_average_gpu(struct Dataset * dataset)
         return NULL;
     }
 
-    float *d_images;
-    GPU_CHECKERROR(
-    cudaMalloc((void **)&d_images, n * w * h * sizeof(float))
-    );
-    for(int i = 0; i < n; i++){
-        GPU_CHECKERROR(
-        cudaMemcpy((void*)(d_images + i * w * h),
-                   (void*)(dataset->original_images)[i]->data,
-                   w * h * sizeof(float),
-                   cudaMemcpyHostToDevice)
-        );
-    }
-
+    START_TIMER(timer);
     float *h_average_image = (float *)malloc(w * h * sizeof(float));
     TEST_MALLOC(h_average_image);
-    float *d_average_image;
     GPU_CHECKERROR(
-    cudaMalloc((void **)&d_average_image, w * h * sizeof(float))
+    cudaMalloc((void **)&(dataset->d_average), w * h * sizeof(float))
     );
-    GPU_CHECKERROR(
-    cudaMemset((void*)d_average_image, 0, w * h * sizeof(float))
-    );
+    STOP_TIMER(timer);
+    PRINT("INFO", "Time allocating average Image to GPU: %f\n", timer.time);
 
-
+    START_TIMER(timer);
     dim3 dimOfGrid(ceil(w * 1.0 / 32), ceil(h * 1.0 / 32), 1);
     dim3 dimOfBlock(32, 32, 1);
-    compute_average_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_images, w, h, n, d_average_image);
+    compute_average_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(dataset->d_original_images, w, h, n, dataset->d_average);
     cudaError_t cudaerr = cudaDeviceSynchronize();
     if (cudaerr != CUDA_SUCCESS) {
         PRINT("WARN", "kernel launch failed with error \"%s\"\n",
                cudaGetErrorString(cudaerr));
         return NULL;
     }
+    STOP_TIMER(timer);
+    PRINT("INFO", "Time computing on GPU: %f\n", timer.time);
 
+    START_TIMER(timer);
     GPU_CHECKERROR(
     cudaMemcpy((void*)h_average_image,
-               (void*)d_average_image,
+               (void*)dataset->d_average,
                w * h * sizeof(float),
                cudaMemcpyDeviceToHost)
     );
+    STOP_TIMER(timer);
+    PRINT("INFO", "Time copying average back to host: %f\n", timer.time);
+
 
     struct Image *h_average = (struct Image *)malloc(sizeof(struct Image));
     TEST_MALLOC(h_average);
@@ -208,12 +210,6 @@ struct Image * compute_average_gpu(struct Dataset * dataset)
     h_average->h = h;
     h_average->comp = 1;
 
-    GPU_CHECKERROR(
-    cudaFree(d_average_image)
-    );
-    GPU_CHECKERROR(
-    cudaFree(d_images)
-    );
     dataset->average = h_average;
     printf("exiting compute_average_gpu()...\n");
     return h_average;
@@ -243,19 +239,146 @@ float dot_product_cpu(float *a, float *b, int size)
     return sum;
 }
 
+// Makes sure the thread size is greater of equal to the size of the vectors
+__global__
+void dot_product_gpu_kernel(float *a, float *b, int size, float *result)
+{
+    extern __shared__ float s_thread_sums[];
+    int i = threadIdx.x;
+    s_thread_sums[i] = i < size ? a[i] * b[i] : 0;
+    __syncthreads();
+
+    // Reduction
+    for (int stride = blockDim.x / 2; stride > 32; stride /= 2) {
+        if (i < stride)
+            s_thread_sums[i] += s_thread_sums[i + stride];
+        __syncthreads();
+    }
+    if (i < 32) {
+        volatile float *cache = s_thread_sums;
+        cache[i] += cache[i + 32];
+        cache[i] += cache[i + 16];
+        cache[i] += cache[i + 8];
+        cache[i] += cache[i + 4];
+        cache[i] += cache[i + 2];
+        cache[i] += cache[i + 1];
+    }
+    if (i == 0)
+        *result = s_thread_sums[0];
+    return;
+}
+
 // Expect v to be initialized to 0
 void jacobi_cpu(const float *a, const int n, float *v, float *e)
 {
     int p, q, flag, t = 0;
     float temp;
     float theta, zero = 1e-5, max, pi = 3.141592654, c, s;
-    float *d = (float *)malloc(n * n * sizeof(float));
+    float *d = (float *)malloc(n * n * sizeof(float)); // no need to copy a, has to be changed
+    Timer timer;
+    INITIALIZE_TIMER(timer);
+
+    START_TIMER(timer);
     for (int i = 0; i < n * n; i++)
         d[i] = a[i];
 
     for(int i = 0; i < n; i++)
         v[i * n + i] = 1;
+    STOP_TIMER(timer);
+    PRINT("INFO", "Jacobi: Time to copy and initialize matrix: %fms\n", timer.time);
 
+    START_TIMER(timer);
+    while(1) {
+        flag = 0;
+        p = 0;
+        q = 1;
+        max = fabs(d[0 * n + 1]);
+        for(int i = 0; i < n; i++)
+            for(int j = i + 1; j < n; j++) {
+                temp = fabs(d[i * n + j]);
+                if (temp > zero) {
+                    flag = 1;
+                    if (temp > max) {
+                        max = temp;
+                        p = i;
+                        q = j;
+                    }
+                }
+            }
+        if (!flag)
+            break;
+        t++;
+        if(d[p * n + p] == d[q * n + q]) {
+            if(d[p * n + q] > 0)
+                theta = pi/4;
+            else
+                theta = -pi/4;
+        } else {
+            theta = 0.5 * atan(2 * d[p * n + q] / (d[p * n + p] - d[q * n + q]));
+        }
+        c = cos(theta);
+        s = sin(theta);
+
+        for(int i = 0; i < n; i++) {
+            temp = c * d[p * n + i] + s * d[q * n + i];
+            d[q * n + i] = -s * d[p * n + i] + c * d[q * n + i];
+            d[p * n + i] = temp;
+        }
+
+        for(int i = 0; i < n; i++) {
+            temp = c * d[i * n  + p] + s * d[i * n + q];
+            d[i * n + q] = -s * d[i * n + p] + c * d[i * n + q];
+            d[i * n + p] = temp;
+        }
+
+        for(int i = 0; i < n; i++) {
+            temp = c * v[i * n + p] + s * v[i * n + q];
+            v[i * n + q] = -s * v[i * n + p] + c * v[i * n + q];
+            v[i * n + p] = temp;
+        }
+
+    }
+    STOP_TIMER(timer);
+    PRINT("INFO", "Jacobi: time for main loop: %fms\n", timer.time);
+
+    //printf("Nb of iterations: %d\n", t);
+/*  printf("The eigenvalues are \n");
+    for(int i = 0; i < n; i++)
+        printf("%8.5f ", d[i * n + i]);
+
+    printf("\nThe corresponding eigenvectors are \n");
+    for(int j = 0; j < n; j++) {
+        for(int i = 0; i < n; i++)
+            printf("% 8.5f,",v[i * n + j]);
+        printf("\n");
+    }*/
+    for (int i = 0; i < n; i++) {
+        e[2 * i + 0] = d[i * n + i];
+        e[2 * i + 1] = i;
+    }
+    free(d);
+}
+
+// Expect v to be initialized to 0
+void jacobi_gpu(const float *a, const int n, float *v, float *e)
+{
+    int p, q, flag, t = 0;
+    float temp;
+    float theta, zero = 1e-5, max, pi = 3.141592654, c, s;
+    float *d = (float *)malloc(n * n * sizeof(float));
+    Timer timer;
+    INITIALIZE_TIMER(timer);
+
+    START_TIMER(timer);
+    for (int i = 0; i < n * n; i++)
+        d[i] = a[i];
+
+    for(int i = 0; i < n; i++)
+        v[i * n + i] = 1;
+    STOP_TIMER(timer);
+    PRINT("INFO", "Jacobi: Time to copy and initialize matrix: %fms\n", timer.time);
+
+    START_TIMER(timer);
     while(1) {
         flag = 0;
         p = 0;
@@ -308,6 +431,8 @@ void jacobi_cpu(const float *a, const int n, float *v, float *e)
         }
 
     }
+    STOP_TIMER(timer);
+    PRINT("INFO", "Jacobi: time for main loop: %fms\n", timer.time);
 
     //printf("Nb of iterations: %d\n", t);
 /*  printf("The eigenvalues are \n");
@@ -338,36 +463,199 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
     int n = dataset->num_original_images;
     int w = dataset->w;
     int h = dataset->h;
+    Timer timer;
+    INITIALIZE_TIMER(timer);
 
+    START_TIMER(timer);
     float **images_minus_average = (float **)malloc(n * sizeof(float *));
     TEST_MALLOC(images_minus_average);
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_cpu: Time to allocate images_minus_average: %f\n", timer.time);
 
-    for (int i = 0; i < n; i++) {
+    START_TIMER(timer);
+    for (int i = 0; i < n; i++)
         images_minus_average[i] = dataset->original_images[i]->data;
-    }
 
     // Substract average to images
     struct Image *average = dataset->average;
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++)
         for (int j = 0; j < w * h; j++)
-            //images_minus_average[i][j] = (images_minus_average[i][j] - average->data[j]) * 1000; // otherwise the dot product will be too small and jocobi will fail
             images_minus_average[i][j] = images_minus_average[i][j] - average->data[j];
-        // Normalize images_minus_average
-	// normalize_cpu(...);
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_cpu: Time to substract average %f\n", timer.time);
+    PRINT("DEBUG", "Substracting average to images... done\n");
+
+    // Construct the Covariance Matrix
+    START_TIMER(timer);
+    float *covariance_matrix = (float *)malloc(n * n * sizeof(float));
+    TEST_MALLOC(covariance_matrix);
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_cpu: Time to allocate covariance matrix %f\n", timer.time);
+
+    START_TIMER(timer);
+    for (int i = 0; i < n; i++) {
+        covariance_matrix[i * n + i] = dot_product_cpu(images_minus_average[i], images_minus_average[i], w * h) / n;
+        for (int j = i + 1; j < n; j++) {
+            covariance_matrix[i * n + j] = dot_product_cpu(images_minus_average[i], images_minus_average[j],  w * h) / n;
+            covariance_matrix[j * n + i] = covariance_matrix[i * n + j];
+        }
     }
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_cpu: Time to compute covariance matrix %f\n", timer.time);
+    PRINT("DEBUG", "Building covariance matrix... done\n");
+
+    // Compute eigenfaces
+    START_TIMER(timer);
+    float *eigenfaces = (float *)calloc(n * n, sizeof(float));
+    TEST_MALLOC(eigenfaces);
+    // eigenvalues stores couple (ev, index), makes it easier to get the top K
+    // later
+    float *eigenvalues = (float *)malloc(2 * n * sizeof(float));
+    TEST_MALLOC(eigenvalues);
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_cpu: Time to allocate arrays for jacobi %f\n", timer.time);
+
+    START_TIMER(timer);
+    jacobi_cpu(covariance_matrix, n, eigenfaces, eigenvalues);
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_cpu: Time to do jacobi CPU %f\n", timer.time);
+    PRINT("DEBUG", "Computing eigenfaces... done\n");
+
+
+    // Keep only top num_to_keep eigenfaces.
+    // Assumes num_to_keep is in the correct range.
+    START_TIMER(timer);
+    int num_eigenvalues_not_zero = 0;
+    qsort(eigenvalues, n, 2 * sizeof(float), comp_eigenvalues);
+    for (int i = 0; i < n; i++)
+        if (eigenvalues[2 * i] > 0.5)
+            num_eigenvalues_not_zero++;
+    num_to_keep = num_eigenvalues_not_zero;
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_cpu: Time to sort eigenvalues %f\n", timer.time);
+
+    // Convert size n eigenfaces to size w*h
+    START_TIMER(timer);
+    dataset->num_eigenfaces = num_to_keep;
+    dataset->eigenfaces = (struct Image **)malloc(num_to_keep * sizeof(struct Image *));
+    TEST_MALLOC(dataset->eigenfaces);
+    for (int i = 0; i < num_to_keep; i++) {
+        dataset->eigenfaces[i] = (struct Image *)malloc(sizeof(struct Image));
+        TEST_MALLOC(dataset->eigenfaces[i]);
+        dataset->eigenfaces[i]->data = (float *)malloc(w * h * sizeof(float));
+        TEST_MALLOC(dataset->eigenfaces[i]->data);
+        dataset->eigenfaces[i]->w = w;
+        dataset->eigenfaces[i]->h = h;
+        dataset->eigenfaces[i]->comp = 1;
+        dataset->eigenfaces[i]->req_comp = 1;
+        sprintf(dataset->eigenfaces[i]->filename, "Eigen_%d", i);
+    }
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_cpu: Time to allocate eigenfaces %f\n", timer.time);
+
+    START_TIMER(timer);
+    float sqrt_n = sqrt(n);
+    for (int i = 0; i < num_to_keep; i++) {
+        int index = (int)eigenvalues[2 * i + 1];
+        for (int j = 0; j < w * h; j++) {
+            float temp = 0;
+            for (int k = 0; k < n; k++)
+                temp += images_minus_average[k][j] * eigenfaces[k * n + index];
+            dataset->eigenfaces[i]->data[j] = temp / sqrt_n;
+        }
+        normalize_cpu(dataset->eigenfaces[i]->data, w * h);
+    }
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_cpu: Time to transform eigenfaces to w * h %f\n", timer.time);
+
+    PRINT("DEBUG", "Transforming eigenfaces... done\n");
+
+    // Test if eigenfaces are orthogonal
+    for (int i = 0; i < num_to_keep; i++)
+        PRINT("DEBUG", "<0|%d> = %f\n", i, dot_product_cpu(dataset->eigenfaces[0]->data, dataset->eigenfaces[i]->data, w * h));
+
+    // Test if eigenfaces before transform are orthogonal
+    float *original_eigenfaces_5 = (float *)malloc(n * sizeof(float));
+    float *original_eigenfaces_i = (float *)malloc(n * sizeof(float));
+    for (int j = 0; j < n; j++)
+        original_eigenfaces_5[j] = eigenfaces[j * n + 5];
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++)
+            original_eigenfaces_i[j] = eigenfaces[j * n + i];
+        PRINT("DEBUG", "<0|%d> = %f\n", i, dot_product_cpu(original_eigenfaces_5, original_eigenfaces_i, n));
+    }
+
+    free(covariance_matrix);
+    free(eigenfaces);
+    free(eigenvalues);
+    return 0;
+}
+
+__global__
+void substract_average_gpu_kernel(float *data, float *average, int size)
+{
+    int i = blockDim.x * threadIdx.y + threadIdx.x;
+    if (i >= size)
+        return;
+    data[i] -= average[i];
+}
+
+// not finished at all
+int compute_eigenfaces_gpu(struct Dataset * dataset, int num_to_keep)
+{
+    int n = dataset->num_original_images;
+    int w = dataset->w;
+    int h = dataset->h;
+    Timer timer;
+    INITIALIZE_TIMER(timer);
+
+    // Substract average to images
+    dim3 dimOfGrid(n, 1, 1);
+    dim3 dimOfGridUnitary(1, 1, 1);
+    dim3 dimOfBlock(w * h > 1024 ? 1024 : ceil(w * h / 32), w * h / 1024, 1 );
+
+    START_TIMER(timer);
+    substract_average_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(dataset->d_original_images, dataset->d_average, w * h);
+    cudaError_t cudaerr = cudaDeviceSynchronize();
+    if (cudaerr != CUDA_SUCCESS) {
+        PRINT("WARN", "kernel launch failed with error \"%s\"\n",
+               cudaGetErrorString(cudaerr));
+        return NULL;
+    }
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_gpu: Time to substract average: %fms\n", timer.time);
+
     PRINT("DEBUG", "Substracting average to images... done\n");
 
     // Construct the Covariance Matrix
     float *covariance_matrix = (float *)malloc(n * n * sizeof(float));
     TEST_MALLOC(covariance_matrix);
 
+    START_TIMER(timer);
     for (int i = 0; i < n; i++) {
-        covariance_matrix[i * n + i] = dot_product_cpu(images_minus_average[i], images_minus_average[i], n) / n;
+
+        dot_product_gpu_kernel<<<dimOfGridUnitary, dimOfBlock>>>(&(dataset->d_original_images[i * w * h]), &(dataset->d_original_images[i * w * h]), n, &covariance_matrix[i * n + i]);
+        cudaerr = cudaDeviceSynchronize();
+        if (cudaerr != CUDA_SUCCESS) {
+            PRINT("WARN", "kernel launch failed with error \"%s\"\n",
+                cudaGetErrorString(cudaerr));
+            return NULL;
+        }
+        covariance_matrix[i * n + i] /= n;
         for (int j = i + 1; j < n; j++) {
-            covariance_matrix[i * n + j] = dot_product_cpu(images_minus_average[i], images_minus_average[j], n) / n;
+            dot_product_gpu_kernel<<<dimOfGridUnitary, dimOfBlock>>>(&(dataset->d_original_images[i * w * h]), &(dataset->d_original_images[j * w * h]), n, &covariance_matrix[i * n + j]);
+            cudaerr = cudaDeviceSynchronize();
+            if (cudaerr != CUDA_SUCCESS) {
+                PRINT("WARN", "kernel launch failed with error \"%s\"\n",
+                    cudaGetErrorString(cudaerr));
+                return NULL;
+            }
+            covariance_matrix[i * n + j] /= n;
             covariance_matrix[j * n + i] = covariance_matrix[i * n + j];
         }
     }
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_gpu: Time to compute covariance matrix: %fms\n", timer.time);
     PRINT("DEBUG", "Building covariance matrix... done\n");
 
     // Compute eigenfaces
@@ -377,7 +665,12 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
     // later
     float *eigenvalues = (float *)malloc(2 * n * sizeof(float));
     TEST_MALLOC(eigenvalues);
+
+    START_TIMER(timer);
     jacobi_cpu(covariance_matrix, n, eigenfaces, eigenvalues);
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_gpu: Time to do jacobi cpu: %fms\n", timer.time);
+
     PRINT("DEBUG", "Computing eigenfaces... done\n");
 
 
@@ -407,7 +700,8 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
         dataset->eigenfaces[i]->req_comp = 1;
         sprintf(dataset->eigenfaces[i]->filename, "Eigen_%d", i);
     }
-
+/*
+    START_TIMER(timer);
     float sqrt_n = sqrt(n);
     for (int i = 0; i < num_to_keep; i++) {
         int index = (int)eigenvalues[2 * i + 1];
@@ -419,29 +713,32 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
         }
         normalize_cpu(dataset->eigenfaces[i]->data, w * h);
     }
-    PRINT("DEBUG", "Transforming eigenfaces... done\n");
-/*
-    // Test if eigenfaces are orthogonal
-    for (int i = 0; i < num_to_keep; i++)
-        PRINT("DEBUG", "<0|%d> = %f\n", i, dot_product_cpu(dataset->eigenfaces[0]->data, dataset->eigenfaces[i]->data, w * h));
-
-    // Test if eigenfaces before transform are orthogonal
-    float *original_eigenfaces_5 = (float *)malloc(n * sizeof(float));
-    float *original_eigenfaces_i = (float *)malloc(n * sizeof(float));
-    for (int j = 0; j < n; j++)
-        original_eigenfaces_5[j] = eigenfaces[j * n + 5];
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++)
-            original_eigenfaces_i[j] = eigenfaces[j * n + i];
-        PRINT("DEBUG", "<0|%d> = %f\n", i, dot_product_cpu(original_eigenfaces_5, original_eigenfaces_i, n));
-    }
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_gpu: Time to transform eigenfaces to w * h: %f\n", timer.time);
 */
+    PRINT("DEBUG", "Transforming eigenfaces... done\n");
+
+    // Copying eigenfaces to GPU
+    START_TIMER(timer);
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&(dataset->d_eigenfaces), num_to_keep * w * h * sizeof(float))
+    );
+    for (int i = 0; i < num_to_keep; i++) {
+        GPU_CHECKERROR(
+        cudaMemcpy((void*)&(dataset->d_eigenfaces[i * w * h]),
+                   (void*)dataset->eigenfaces[i]->data,
+                   w * h * sizeof(float),
+                   cudaMemcpyHostToDevice)
+        );
+    }
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_gpu: Time to copy eigenfaces to GPU: %f\n", timer.time);
+
     free(covariance_matrix);
     free(eigenfaces);
     free(eigenvalues);
     return 0;
 }
-
 // Assumes images is valid and dataset not NULL
 struct FaceCoordinates ** compute_weighs_cpu(struct Dataset *dataset, struct Image **images, int k, int add_to_dataset)
 {
@@ -463,7 +760,7 @@ struct FaceCoordinates ** compute_weighs_cpu(struct Dataset *dataset, struct Ima
         if (c)
             *c = '\0';
 
-        //PRINT("DEBUG", "Name: %s\n", current_face->name);
+        PRINT("DEBUG", "Name: %s\n", current_face->name);
 
         current_face->num_eigenfaces = num_eigens;
         current_face->coordinates = (float *)malloc(num_eigens * sizeof(float));
@@ -473,12 +770,9 @@ struct FaceCoordinates ** compute_weighs_cpu(struct Dataset *dataset, struct Ima
             current_face->coordinates[j] = dot_product_cpu(current_image->data,
                                                 dataset->eigenfaces[j]->data, w * h);
 
-        // Normalize?
-        //normalize_cpu(current_face->coordinates, num_eigens);
-/*
         for (int j = 0; j < num_eigens; j++)
             printf("%f ", current_face->coordinates[j]);
-        printf("\n");*/
+        printf("\n");
     }
 
     if (add_to_dataset) {
@@ -504,7 +798,7 @@ struct FaceCoordinates * get_closest_match_cpu(struct Dataset *dataset, struct F
         for (int j = 0; j < num_eigens; j++)
             diff[j] = face->coordinates[j] - dataset->faces[i]->coordinates[j];
         float distance = sqrt(dot_product_cpu(diff, diff, num_eigens));
-        //PRINT("DEBUG", "Distance between %s and %s is %f\n", face->name, dataset->faces[i]->name, distance);
+        PRINT("DEBUG", "Distance between %s and %s is %f\n", face->name, dataset->faces[i]->name, distance);
         if (distance < min) {
             min = distance;
             closest = dataset->faces[i];

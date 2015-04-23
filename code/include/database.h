@@ -36,6 +36,10 @@ struct Dataset {
 	struct Image *average; //malloc
 	struct Image **eigenfaces; //malloc
 	struct FaceCoordinates **faces; //malloc
+	float *d_original_images; // no need to realloc
+	float *d_average;
+	float *d_eigenfaces;
+	float **d_faces; // number of faces can be increased during exectution
 };
 
 struct Image * load_image(const char *filename, int req_comp);

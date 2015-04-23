@@ -1,6 +1,18 @@
 #ifndef MISC_H
 #define MISC_H
 
+// error checking for CUDA calls: use this around ALL your calls!
+#define GPU_CHECKERROR(err) (gpuCheckError(err, __FILE__, __LINE__ ))
+static void gpuCheckError(cudaError_t err,
+                         const char *file,
+                         int line ) {
+    if (err != cudaSuccess) {
+        printf("%s in %s at line %d\n", cudaGetErrorString(err),
+                file, line );
+        exit(EXIT_FAILURE);
+    }
+}
+
 #define KNRM  "\x1B[0m"
 #define KRED  "\x1B[31m"
 #define KGRN  "\x1B[32m"

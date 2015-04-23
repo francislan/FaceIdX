@@ -57,6 +57,8 @@ struct Dataset * create_dataset(const char *directory, const char *name)
     int w = 0, h = 0;
     struct Dataset *dataset = NULL;
     char command[200] = ""; // careful buffer overflow
+    Timer timer;
+    INITIALIZE_TIMER(timer);
 
     sprintf(command, "ls %s | grep png", directory);
 
@@ -111,6 +113,26 @@ struct Dataset * create_dataset(const char *directory, const char *name)
         i++;
         PRINT("DEBUG", "Loading file: %s\n", dataset->original_images[i-1]->filename);
     }
+
+    START_TIMER(timer);
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&(dataset->d_original_images), num_images * w * h * sizeof(float))
+    );
+    STOP_TIMER(timer);
+    PRINT("INFO", "Time allocating original_images on GPU: %fms.\n", timer.time);
+    START_TIMER(timer);
+    for (int i = 0; i < num_images; i++) {
+        GPU_CHECKERROR(
+        cudaMemcpy((void*)(dataset->d_original_images + i * w * h),
+                   (void*)dataset->original_images[i]->data,
+                   w * h * sizeof(float),
+                   cudaMemcpyHostToDevice)
+        );
+    }
+    STOP_TIMER(timer);
+    PRINT("INFO", "Time copying original_images to GPU: %fms.\n", timer.time);
+
+
     dataset->w = w;
     dataset->h = h;
     dataset->num_eigenfaces = 0;
@@ -119,6 +141,9 @@ struct Dataset * create_dataset(const char *directory, const char *name)
     dataset->average = NULL;
     dataset->eigenfaces = NULL;
     dataset->faces = NULL;
+    dataset->d_average = NULL;
+    dataset->d_eigenfaces = NULL;
+    dataset->d_faces = NULL;
 
 end:
     fclose(fp);
