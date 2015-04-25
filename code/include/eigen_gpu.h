@@ -1,7 +1,7 @@
-#ifndef EIGEN_H
-#define EIGEN_H
+#ifndef EIGEN_GPU_H
+#define EIGEN_GPU_H
 
-struct Dataset * create_dataset_and_compute_all(const char *path, const char *name);
+struct DatasetGPU * create_dataset_and_compute_all_gpu(const char *path, const char *name);
 void normalize_cpu(float *array, int size);
 struct Image * compute_average_cpu(struct Dataset * dataset);
 struct Image * compute_average_gpu(struct Dataset * dataset);

@@ -4,18 +4,18 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "database.h"
+#include "database_gpu.h"
 #include "misc.h"
-#include "eigen.h"
+#include "eigen_gpu.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
 // User has to call free_image
-struct Image * load_image(const char *filename, int req_comp)
+struct ImageGPU * load_image_gpu(const char *filename, int req_comp)
 {
-    struct Image *image = (struct Image *)malloc(sizeof(struct Image));
+    struct ImageGPU *image = (struct ImageGPU *)malloc(sizeof(struct ImageGPU));
     TEST_MALLOC(image);
     unsigned char *image_data = stbi_load(filename, &(image->w), &(image->h), &(image->comp), req_comp);
     strcpy(image->filename, filename); // buffer overflow
@@ -31,7 +31,7 @@ struct Image * load_image(const char *filename, int req_comp)
     return image;
 }
 
-void free_image(struct Image *image)
+void free_image_gpu(struct ImageGPU *image)
 {
     if (image == NULL)
 	return;
@@ -40,7 +40,7 @@ void free_image(struct Image *image)
     free(image);
 }
 
-void free_face(struct FaceCoordinates *face)
+void free_face_gpu(struct FaceCoordinatesGPU *face)
 {
     if (face == NULL)
 	return;
@@ -48,14 +48,14 @@ void free_face(struct FaceCoordinates *face)
     free(face);
 }
 
-struct Dataset * create_dataset(const char *directory, const char *name)
+struct DatasetGPU * create_dataset_gpu(const char *directory, const char *name)
 {
     char * line = NULL;
     size_t len = 0;
     int num_images = 0;
     int i = 0;
     int w = 0, h = 0;
-    struct Dataset *dataset = NULL;
+    struct DatasetGPU *dataset = NULL;
     char command[200] = ""; // careful buffer overflow
     Timer timer;
     INITIALIZE_TIMER(timer);
@@ -81,13 +81,13 @@ struct Dataset * create_dataset(const char *directory, const char *name)
     fclose(fp);
     fp = popen(command, "r"); // run the command twice, not optimal, and possible exploit
 
-    dataset = (struct Dataset *)malloc(sizeof(struct Dataset));
+    dataset = (struct DatasetGPU *)malloc(sizeof(struct DatasetGPU));
 
     TEST_MALLOC(dataset);
     strcpy(dataset->name, name);
     dataset->path = "";
     dataset->num_original_images = num_images;
-    dataset->original_images = (struct Image **)malloc(num_images * sizeof(struct Image *));
+    dataset->original_images = (struct ImageGPU **)malloc(num_images * sizeof(struct ImageGPU *));
     TEST_MALLOC(dataset->original_images);
 
     while (getline(&line, &len, fp) != -1) {
@@ -97,15 +97,15 @@ struct Dataset * create_dataset(const char *directory, const char *name)
         strcpy(image_name, directory);
         strcat(image_name, "/");
         strcat(image_name, line);
-        dataset->original_images[i] = load_image(image_name, 1);
+        dataset->original_images[i] = load_image_gpu(image_name, 1);
 	strcpy(dataset->original_images[i]->filename, line); // buffer overflow
         if (i == 0) {
             w = dataset->original_images[0]->w;
             h = dataset->original_images[0]->h;
         } else {
             if (w != dataset->original_images[i]->w || h != dataset->original_images[i]->h) {
-                PRINT("WARN", "Images in directory have different width and/or height. Aborting\n");
-                free_dataset(dataset);
+                PRINT("WARN", "ImageGPUs in directory have different width and/or height. Aborting\n");
+                free_dataset_gpu(dataset);
                 dataset = NULL;
                 goto end;
             }
@@ -154,14 +154,14 @@ end:
 }
 
 // No input checking -> Not secure at all
-struct Dataset * load_dataset(const char *path)
+struct DatasetGPU * load_dataset_gpu(const char *path)
 {
     FILE *f = fopen(path, "rb");
     if (f == NULL) {
         PRINT("WARN", "Unable to open file %s!\n", path);
         return NULL;
     }
-    struct Dataset *dataset = (struct Dataset *)malloc(sizeof(struct Dataset));
+    struct DatasetGPU *dataset = (struct DatasetGPU *)malloc(sizeof(struct DatasetGPU));
     TEST_MALLOC(dataset);
     dataset->path = path;
     dataset->num_eigenfaces = 0;
@@ -186,7 +186,7 @@ struct Dataset * load_dataset(const char *path)
     int h = dataset->h;
     fread(&(dataset->num_eigenfaces), sizeof(int), 1, f);
 
-    dataset->average = (struct Image *)malloc(sizeof(struct Image));
+    dataset->average = (struct ImageGPU *)malloc(sizeof(struct ImageGPU));
     TEST_MALLOC(dataset->average);
 
     dataset->average->w = w;
@@ -202,11 +202,11 @@ struct Dataset * load_dataset(const char *path)
     }
     fread(dataset->average->data, w * h * sizeof(float), 1, f);
 
-    dataset->eigenfaces = (struct Image **)malloc(dataset->num_eigenfaces * sizeof(struct Image *));
+    dataset->eigenfaces = (struct ImageGPU **)malloc(dataset->num_eigenfaces * sizeof(struct ImageGPU *));
     TEST_MALLOC(dataset->eigenfaces);
 
     for (int i = 0; i < dataset->num_eigenfaces; i++) {
-        dataset->eigenfaces[i] = (struct Image *)malloc(sizeof(struct Image));
+        dataset->eigenfaces[i] = (struct ImageGPU *)malloc(sizeof(struct ImageGPU));
         TEST_MALLOC(dataset->eigenfaces[i]);
 
         dataset->eigenfaces[i]->w = w;
@@ -226,7 +226,7 @@ struct Dataset * load_dataset(const char *path)
     int current_size = 0;
     char c;
     int num_allocated_faces = 50;
-    dataset->faces = (struct FaceCoordinates **)malloc(num_allocated_faces * sizeof(struct FaceCoordinates *));
+    dataset->faces = (struct FaceCoordinatesGPU **)malloc(num_allocated_faces * sizeof(struct FaceCoordinatesGPU *));
     TEST_MALLOC(dataset->faces);
     while (1) {
         size_t read = fread(&c, sizeof(char), 1, f);
@@ -236,11 +236,11 @@ struct Dataset * load_dataset(const char *path)
         current_size++;
         if (current_size > num_allocated_faces) {
             num_allocated_faces *= 2;
-            dataset->faces = (struct FaceCoordinates **)realloc(dataset->faces, num_allocated_faces * sizeof(struct FaceCoordinates *));
+            dataset->faces = (struct FaceCoordinatesGPU **)realloc(dataset->faces, num_allocated_faces * sizeof(struct FaceCoordinatesGPU *));
             TEST_MALLOC(dataset->faces);
         }
 
-        dataset->faces[current_size - 1] = (struct FaceCoordinates *)malloc(sizeof(struct FaceCoordinates));
+        dataset->faces[current_size - 1] = (struct FaceCoordinatesGPU *)malloc(sizeof(struct FaceCoordinatesGPU));
         TEST_MALLOC(dataset->faces[current_size - 1]);
 
         dataset->faces[current_size - 1]->num_eigenfaces = dataset->num_eigenfaces;
@@ -254,7 +254,7 @@ struct Dataset * load_dataset(const char *path)
         fread(dataset->faces[current_size - 1]->coordinates, dataset->num_eigenfaces * sizeof(float), 1, f);
     }
     if (current_size < num_allocated_faces) {
-        dataset->faces = (struct FaceCoordinates **)realloc(dataset->faces, current_size * sizeof(struct FaceCoordinates *));
+        dataset->faces = (struct FaceCoordinatesGPU **)realloc(dataset->faces, current_size * sizeof(struct FaceCoordinatesGPU *));
         TEST_MALLOC(dataset->faces);
     }
     dataset->num_faces = current_size;
@@ -266,7 +266,7 @@ struct Dataset * load_dataset(const char *path)
 // Known bug: if saving to an existing file, the program doesn't know how
 // many faces are already there, it will only save the ones that have been
 // added since the last loading/creation of the database
-int save_dataset_to_disk(struct Dataset *dataset, const char *path)
+int save_dataset_to_disk_gpu(struct DatasetGPU *dataset, const char *path)
 {
     // No safe, TOCTOU, etc
     if(access(path, F_OK) != -1 ) {
@@ -278,7 +278,7 @@ int save_dataset_to_disk(struct Dataset *dataset, const char *path)
         }
         for (int i = dataset->num_faces - dataset->num_new_faces; i < dataset->num_faces; i++) {
             fwrite("\0", sizeof(char), 1, f);
-            struct FaceCoordinates *face = dataset->faces[i];
+            struct FaceCoordinatesGPU *face = dataset->faces[i];
             fwrite(face->name, sizeof(char), strlen(face->name), f);
             fwrite("\0", sizeof(char), 1, f);
             for (int j = 0; j < face->num_eigenfaces; j++)
@@ -330,27 +330,27 @@ int save_dataset_to_disk(struct Dataset *dataset, const char *path)
     return 0;
 }
 
-void free_dataset(struct Dataset *dataset)
+void free_dataset_gpu(struct DatasetGPU *dataset)
 {
     if (dataset == NULL)
 	return;
     for (int i = 0; i < dataset->num_original_images; i++)
-	free_image(dataset->original_images[i]);
+	free_image_gpu(dataset->original_images[i]);
     free(dataset->original_images);
 
     for (int i = 0; i < dataset->num_eigenfaces; i++)
-	free_image(dataset->eigenfaces[i]);
+	free_image_gpu(dataset->eigenfaces[i]);
     free(dataset->eigenfaces);
 
     for (int i = 0; i < dataset->num_faces; i++)
-	free_face(dataset->faces[i]);
+	free_face_gpu(dataset->faces[i]);
     free(dataset->faces);
 
-    free_image(dataset->average);
+    free_image_gpu(dataset->average);
     free(dataset);
 }
 
-void save_image_to_disk(struct Image *image, const char *name)
+void save_image_to_disk_gpu(struct ImageGPU *image, const char *name)
 {
     int w = image->w;
     int h = image->h;
@@ -377,9 +377,9 @@ void save_image_to_disk(struct Image *image, const char *name)
 }
 
 
-void save_reconstructed_face_to_disk(struct Dataset *dataset, struct FaceCoordinates *face, int num_eigenfaces)
+void save_reconstructed_face_to_disk(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face, int num_eigenfaces)
 {
-    struct Image *image = (struct Image *)malloc(sizeof(struct Image));
+    struct ImageGPU *image = (struct ImageGPU *)malloc(sizeof(struct ImageGPU));
     TEST_MALLOC(image);
     image->w = dataset->w;
     image->h = dataset->h;
@@ -413,13 +413,13 @@ void save_reconstructed_face_to_disk(struct Dataset *dataset, struct FaceCoordin
         image->data[j] = (image->data[j] - min) / (max - min) * 255;
 
     sprintf(image->filename, "reconstructed/%s_with_%d.png", face->name, n);
-    save_image_to_disk(image, image->filename);
-    free_image(image);
+    save_image_to_disk_gpu(image, image->filename);
+    free_image_gpu(image);
 }
 
 // Expects dataset != NULL
 // Returns the number of faces added
-int add_faces_and_compute_coordinates(struct Dataset *dataset, const char *path)
+int add_faces_and_compute_coordinates(struct DatasetGPU *dataset, const char *path)
 {
     char *line = NULL;
     size_t len = 0;
@@ -428,7 +428,7 @@ int add_faces_and_compute_coordinates(struct Dataset *dataset, const char *path)
     int w = dataset->w;
     int h = dataset->h;
     int i = 0;
-    struct Image **images = NULL;
+    struct ImageGPU **images = NULL;
     char command[200] = ""; // careful buffer overflow
 
     if (strstr(path, ".png")) {
@@ -436,10 +436,10 @@ int add_faces_and_compute_coordinates(struct Dataset *dataset, const char *path)
             PRINT("WARN", "Cannot access file %s!\n", path);
             return 0;
         }
-        struct Image *image = load_image(path, 1);
-        compute_weighs_cpu(dataset, &image, 1, 1);
+        struct ImageGPU *image = load_image(path, 1);
+        compute_weighs_gpu(dataset, &image, 1, 1);
         dataset->num_new_faces++;
-        free_image(image);
+        free_image_gpu(image);
         return 1;
     }
 
@@ -465,7 +465,7 @@ int add_faces_and_compute_coordinates(struct Dataset *dataset, const char *path)
     fclose(fp);
     fp = popen(command, "r"); // run the command twice, not optimal, and possible exploit
     num_allocated = num_images;
-    images = (struct Image **)malloc(num_allocated * sizeof(struct Image *));
+    images = (struct ImageGPU **)malloc(num_allocated * sizeof(struct ImageGPU *));
     TEST_MALLOC(images);
 
     while (getline(&line, &len, fp) != -1) {
@@ -478,14 +478,14 @@ int add_faces_and_compute_coordinates(struct Dataset *dataset, const char *path)
         images[i] = load_image(image_name, 1);
 	strcpy(images[i]->filename, line); // possible buffer overflow
         if (w != images[i]->w || h != images[i]->h) {
-                PRINT("WARN", "Images in directory have different width and/or height. Aborting\n");
+                PRINT("WARN", "ImageGPUs in directory have different width and/or height. Aborting\n");
                 num_images = 0;
                 goto end;
         }
         i++;
         PRINT("DEBUG", "Loading file: %s\n", images[i-1]->filename);
     }
-    compute_weighs_cpu(dataset, images, num_images, 1);
+    compute_weighs_gpu(dataset, images, num_images, 1);
     dataset->num_new_faces += num_images;
 
 end:
@@ -494,23 +494,23 @@ end:
         free(line);
     if (images) {
         for (int i = 0; i < num_allocated; i++)
-            free_image(images[i]);
+            free_image_gpu(images[i]);
         free(images);
     }
     return num_images;
 }
 
-void identify_face(struct Dataset *dataset, const char *path)
+void identify_face_gpu(struct DatasetGPU *dataset, const char *path)
 {
     char *answer;
     if (access(path, F_OK) == -1) {
         PRINT("WARN", "Cannot access file %s!\n", path);
         return;
     }
-    struct Image *image = load_image(path, 1);
-    struct FaceCoordinates **faces = compute_weighs_cpu(dataset, &image, 1, 0);
-    struct FaceCoordinates *face = faces[0];
-    struct FaceCoordinates *closest = get_closest_match_cpu(dataset, face);
+    struct ImageGPU *image = load_image_gpu(path, 1);
+    struct FaceCoordinatesGPU **faces = compute_weighs_gpu(dataset, &image, 1, 0);
+    struct FaceCoordinatesGPU *face = faces[0];
+    struct FaceCoordinatesGPU *closest = get_closest_match_gpu(dataset, face);
     if (closest == NULL) {
         printf("No match found!\n\n");
     } else {
@@ -525,28 +525,16 @@ void identify_face(struct Dataset *dataset, const char *path)
         get_user_string(&answer);
         if (strlen(answer) != 0)
             strcpy(face->name, answer);
-        dataset->faces = (struct FaceCoordinates **)realloc(dataset->faces, (dataset->num_faces + 1) * sizeof(struct FaceCoordinates *));
+        dataset->faces = (struct FaceCoordinatesGPU **)realloc(dataset->faces, (dataset->num_faces + 1) * sizeof(struct FaceCoordinatesGPU *));
         TEST_MALLOC(dataset->faces);
         dataset->faces[dataset->num_faces] = face;
         dataset->num_faces++;
         dataset->num_new_faces++;
     } else {
-        free_face(face);
+        free_face_gpu(face);
     }
     free(answer);
-    free_image(image);
+    free_image_gpu(image);
     free(faces);
 
-}
-
-void get_user_string(char **s)
-{
-    size_t len = 0;
-    int char_read;
-    char_read = getline(s, &len, stdin);
-    if (char_read == -1) {
-        PRINT("BUG", "Unexpected error.");
-        return;
-    }
-    (*s)[char_read - 1] = '\0';
 }

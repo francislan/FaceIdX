@@ -4,13 +4,13 @@
 #include <errno.h>
 #include <math.h>
 
-#include "eigen.h"
-#include "database.h"
+#include "eigen_gpu.h"
+#include "database_gpu.h"
 #include "misc.h"
 
 #define THREADS_PER_BLOCK 256
 
-struct Dataset * create_dataset_and_compute_all(const char *path, const char *name)
+struct DatasetGPU * create_dataset_and_compute_all_gpu(const char *path, const char *name)
 {
     struct Timer timer_cpu, timer_gpu;
     INITIALIZE_TIMER(timer_cpu);
@@ -23,18 +23,18 @@ struct Dataset * create_dataset_and_compute_all(const char *path, const char *na
 
     START_TIMER(timer_cpu);
     printf("\nCreating database...\n\n");
-    struct Dataset *dataset = create_dataset(path, name);
+    struct DatasetGPU *dataset = create_dataset_gpu(path, name);
     STOP_TIMER(timer_cpu);
     fprintf(f, "Time taken for creating database on cpu: %3.1f ms\n", timer_cpu.time);
     if (dataset == NULL) {
-        PRINT("BUG","Dataset creation failed\n");
+        PRINT("BUG","DatasetGPU creation failed\n");
         return NULL;
     }
     printf("\nCreating database... Done!\n\n");
 
     printf("Computing average... ");
     START_TIMER(timer_cpu);
-    struct Image *average = compute_average_cpu(dataset);
+    struct ImageGPU *average = compute_average_gpu(dataset);
     STOP_TIMER(timer_cpu);
     fprintf(f, "Time taken for computing average face on cpu: %3.1f ms\n", timer_cpu.time);
     if (average == NULL) {
@@ -70,7 +70,7 @@ struct Dataset * create_dataset_and_compute_all(const char *path, const char *na
 
 
     START_TIMER(timer_gpu);
-    struct Image *average_gpu = compute_average_gpu(dataset);
+    struct ImageGPU *average_gpu = compute_average_gpu(dataset);
     STOP_TIMER(timer_gpu);
 
     fprintf(f, "Time taken for computing average face on gpu: %3.1f ms\n", timer_gpu.time);
@@ -105,7 +105,7 @@ void normalize_cpu(float *array, int size)
 }
 
 // returns NULL if error, otherwise returns pointer to average
-struct Image * compute_average_cpu(struct Dataset * dataset)
+struct ImageGPU * compute_average_cpu(struct DatasetGPU * dataset)
 {
     int w = dataset->w;
     int h = dataset->h;
@@ -114,7 +114,7 @@ struct Image * compute_average_cpu(struct Dataset * dataset)
     INITIALIZE_TIMER(timer);
 
     if (w <= 0 || h <= 0) {
-        PRINT("WARN", "Dataset's width and/or height incorrect(s)\n");
+        PRINT("WARN", "DatasetGPU's width and/or height incorrect(s)\n");
         return NULL;
     }
     if (n <= 0) {
@@ -123,7 +123,7 @@ struct Image * compute_average_cpu(struct Dataset * dataset)
     }
 
     START_TIMER(timer);
-    struct Image *average = (struct Image *)malloc(sizeof(struct Image));
+    struct ImageGPU *average = (struct ImageGPU *)malloc(sizeof(struct ImageGPU));
     TEST_MALLOC(average);
 
     average->w = w;
@@ -132,7 +132,7 @@ struct Image * compute_average_cpu(struct Dataset * dataset)
     average->data = (float *)malloc(w * h * sizeof(float));
     TEST_MALLOC(average->data);
     STOP_TIMER(timer);
-    PRINT("INFO", "Time allocating average Image: %f\n", timer.time);
+    PRINT("INFO", "Time allocating average ImageGPU: %f\n", timer.time);
 
     START_TIMER(timer);
     for (int x = 0; x < w; x++) {
@@ -153,7 +153,7 @@ struct Image * compute_average_cpu(struct Dataset * dataset)
 }
 
 
-struct Image * compute_average_gpu(struct Dataset * dataset)
+struct ImageGPU * compute_average_gpu(struct DatasetGPU * dataset)
 {
     int w = dataset->w;
     int h = dataset->h;
@@ -162,7 +162,7 @@ struct Image * compute_average_gpu(struct Dataset * dataset)
     INITIALIZE_TIMER(timer);
     printf("entering compute_average_gpu()...\n");
     if (w <= 0 || h <= 0) {
-        PRINT("WARN", "Dataset's width and/or height incorrect(s)\n");
+        PRINT("WARN", "DatasetGPU's width and/or height incorrect(s)\n");
         return NULL;
     }
     if (n <= 0) {
@@ -177,7 +177,7 @@ struct Image * compute_average_gpu(struct Dataset * dataset)
     cudaMalloc((void **)&(dataset->d_average), w * h * sizeof(float))
     );
     STOP_TIMER(timer);
-    PRINT("INFO", "Time allocating average Image to GPU: %f\n", timer.time);
+    PRINT("INFO", "Time allocating average ImageGPU to GPU: %f\n", timer.time);
 
     START_TIMER(timer);
     dim3 dimOfGrid(ceil(w * 1.0 / 32), ceil(h * 1.0 / 32), 1);
@@ -203,7 +203,7 @@ struct Image * compute_average_gpu(struct Dataset * dataset)
     PRINT("INFO", "Time copying average back to host: %f\n", timer.time);
 
 
-    struct Image *h_average = (struct Image *)malloc(sizeof(struct Image));
+    struct ImageGPU *h_average = (struct ImageGPU *)malloc(sizeof(struct ImageGPU));
     TEST_MALLOC(h_average);
     h_average->data = h_average_image;
     h_average->w = w;
@@ -458,7 +458,7 @@ int comp_eigenvalues(const void *a, const void *b)
     return (fabs(*(float *)a) < fabs(*(float *)b)) - (fabs(*(float *)a) > fabs(*(float *)b));
 }
 
-int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
+int compute_eigenfaces_cpu(struct DatasetGPU * dataset, int num_to_keep)
 {
     int n = dataset->num_original_images;
     int w = dataset->w;
@@ -477,7 +477,7 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
         images_minus_average[i] = dataset->original_images[i]->data;
 
     // Substract average to images
-    struct Image *average = dataset->average;
+    struct ImageGPU *average = dataset->average;
     for (int i = 0; i < n; i++)
         for (int j = 0; j < w * h; j++)
             images_minus_average[i][j] = images_minus_average[i][j] - average->data[j];
@@ -537,10 +537,10 @@ int compute_eigenfaces_cpu(struct Dataset * dataset, int num_to_keep)
     // Convert size n eigenfaces to size w*h
     START_TIMER(timer);
     dataset->num_eigenfaces = num_to_keep;
-    dataset->eigenfaces = (struct Image **)malloc(num_to_keep * sizeof(struct Image *));
+    dataset->eigenfaces = (struct ImageGPU **)malloc(num_to_keep * sizeof(struct ImageGPU *));
     TEST_MALLOC(dataset->eigenfaces);
     for (int i = 0; i < num_to_keep; i++) {
-        dataset->eigenfaces[i] = (struct Image *)malloc(sizeof(struct Image));
+        dataset->eigenfaces[i] = (struct ImageGPU *)malloc(sizeof(struct ImageGPU));
         TEST_MALLOC(dataset->eigenfaces[i]);
         dataset->eigenfaces[i]->data = (float *)malloc(w * h * sizeof(float));
         TEST_MALLOC(dataset->eigenfaces[i]->data);
@@ -601,7 +601,7 @@ void substract_average_gpu_kernel(float *data, float *average, int size)
 }
 
 // not finished at all
-int compute_eigenfaces_gpu(struct Dataset * dataset, int num_to_keep)
+int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
 {
     int n = dataset->num_original_images;
     int w = dataset->w;
@@ -687,10 +687,10 @@ int compute_eigenfaces_gpu(struct Dataset * dataset, int num_to_keep)
 
     // Convert size n eigenfaces to size w*h
     dataset->num_eigenfaces = num_to_keep;
-    dataset->eigenfaces = (struct Image **)malloc(num_to_keep * sizeof(struct Image *));
+    dataset->eigenfaces = (struct ImageGPU **)malloc(num_to_keep * sizeof(struct ImageGPU *));
     TEST_MALLOC(dataset->eigenfaces);
     for (int i = 0; i < num_to_keep; i++) {
-        dataset->eigenfaces[i] = (struct Image *)malloc(sizeof(struct Image));
+        dataset->eigenfaces[i] = (struct ImageGPU *)malloc(sizeof(struct ImageGPU));
         TEST_MALLOC(dataset->eigenfaces[i]);
         dataset->eigenfaces[i]->data = (float *)malloc(w * h * sizeof(float));
         TEST_MALLOC(dataset->eigenfaces[i]->data);
@@ -741,21 +741,24 @@ int compute_eigenfaces_gpu(struct Dataset * dataset, int num_to_keep)
 }
 
 // Assumes images is valid and dataset not NULL
-struct FaceCoordinates ** compute_weighs_cpu(struct Dataset *dataset, struct Image **images, int k, int add_to_dataset)
+struct FaceCoordinatesGPU ** compute_weighs_cpu(struct DatasetGPU *dataset, struct ImageGPU **images, int k, int add_to_dataset)
 {
     int w = dataset->w;
     int h = dataset->h;
     int num_eigens = dataset->num_eigenfaces;
     int n = dataset->num_faces;
+    Timer timer;
+    INITIALIZE_TIMER(timer);
 
-    struct FaceCoordinates **new_faces = (struct FaceCoordinates **)malloc(k * sizeof(struct FaceCoordinates *));
+    START_TIMER(timer);
+    struct FaceCoordinatesGPU **new_faces = (struct FaceCoordinatesGPU **)malloc(k * sizeof(struct FaceCoordinatesGPU *));
     TEST_MALLOC(new_faces);
 
     for (int i = 0; i < k; i++) {
-        new_faces[i] = (struct FaceCoordinates *)malloc(sizeof(struct FaceCoordinates));
+        new_faces[i] = (struct FaceCoordinatesGPU *)malloc(sizeof(struct FaceCoordinatesGPU));
         TEST_MALLOC(new_faces[i]);
-        struct FaceCoordinates *current_face = new_faces[i];
-        struct Image *current_image = images[i];
+        struct FaceCoordinatesGPU *current_face = new_faces[i];
+        struct ImageGPU *current_image = images[i];
         strcpy(current_face->name, current_image->filename);
         char *c = strrchr(current_face->name, '.');
         if (c)
@@ -775,36 +778,43 @@ struct FaceCoordinates ** compute_weighs_cpu(struct Dataset *dataset, struct Ima
             printf("%f ", current_face->coordinates[j]);
         printf("\n");*/
     }
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_weighs_cpu: Time to commpute coordinates (including allocation): %fms\n", timer.time);
 
+    START_TIMER(timer);
     if (add_to_dataset) {
-        dataset->faces = (struct FaceCoordinates **)realloc(dataset->faces, (n + k) * sizeof(struct FaceCoordinates *));
+        dataset->faces = (struct FaceCoordinatesGPU **)realloc(dataset->faces, (n + k) * sizeof(struct FaceCoordinatesGPU *));
         TEST_MALLOC(dataset->faces);
         dataset->num_faces = n + k;
 
         for (int i = n; i < n + k; i++)
             dataset->faces[i] = new_faces[i - n];
     }
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_weighs_cpu: Time to add to database: %fms\n", timer.time);
     return new_faces;
 }
 
 // Assumes images is valid and dataset not NULL
 // If the images are already loaded on GPU, set images to NULL and use
 // d_images, otherwise set d_images to NULL and use images
-struct FaceCoordinates ** compute_weighs_gpu(struct Dataset *dataset, struct Image **images, float *d_images, int k, int add_to_dataset)
+struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, struct ImageGPU **images, float *d_images, int k, int add_to_dataset)
 {
     int w = dataset->w;
     int h = dataset->h;
     int num_eigens = dataset->num_eigenfaces;
     int n = dataset->num_faces;
+    Timer timer;
+    INITIALIZE_TIMER(timer);
 
-    struct FaceCoordinates **new_faces = (struct FaceCoordinates **)malloc(k * sizeof(struct FaceCoordinates *));
+    struct FaceCoordinatesGPU **new_faces = (struct FaceCoordinatesGPU **)malloc(k * sizeof(struct FaceCoordinatesGPU *));
     TEST_MALLOC(new_faces);
 
     for (int i = 0; i < k; i++) {
-        new_faces[i] = (struct FaceCoordinates *)malloc(sizeof(struct FaceCoordinates));
+        new_faces[i] = (struct FaceCoordinatesGPU *)malloc(sizeof(struct FaceCoordinatesGPU));
         TEST_MALLOC(new_faces[i]);
-        struct FaceCoordinates *current_face = new_faces[i];
-        struct Image *current_image = images[i];
+        struct FaceCoordinatesGPU *current_face = new_faces[i];
+        struct ImageGPU *current_image = images[i];
         strcpy(current_face->name, current_image->filename);
         char *c = strrchr(current_face->name, '.');
         if (c)
@@ -826,7 +836,7 @@ struct FaceCoordinates ** compute_weighs_gpu(struct Dataset *dataset, struct Ima
     }
 
     if (add_to_dataset) {
-        dataset->faces = (struct FaceCoordinates **)realloc(dataset->faces, (n + k) * sizeof(struct FaceCoordinates *));
+        dataset->faces = (struct FaceCoordinatesGPU **)realloc(dataset->faces, (n + k) * sizeof(struct FaceCoordinatesGPU *));
         TEST_MALLOC(dataset->faces);
         dataset->num_faces = n + k;
 
@@ -836,10 +846,10 @@ struct FaceCoordinates ** compute_weighs_gpu(struct Dataset *dataset, struct Ima
     return new_faces;
 }
 
-struct FaceCoordinates * get_closest_match_cpu(struct Dataset *dataset, struct FaceCoordinates *face)
+struct FaceCoordinatesGPU * get_closest_match_cpu(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face)
 {
     float min = INFINITY;
-    struct FaceCoordinates *closest = NULL;
+    struct FaceCoordinatesGPU *closest = NULL;
     int num_eigens = face->num_eigenfaces;
     float *diff = (float *)malloc(num_eigens * sizeof(float));
     TEST_MALLOC(diff);

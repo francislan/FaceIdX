@@ -76,4 +76,7 @@ struct Timer
 	GPU_CHECKERROR(cudaEventDestroy(t.end)); \
 } while(0)
 
+
+void get_user_string(char **s);
+
 #endif
