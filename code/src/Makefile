@@ -7,7 +7,7 @@ ODIR = obj
 _DEPS = misc.h stb_image.h eigen_cpu.h eigen_gpu.h database_cpu.h database_gpu.h stb_image_write.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
-_OBJ = FaceIdX.o eigen_cpu.o eigen_gpu.o database_cpu.o database_gpu.o
+_OBJ = FaceIdX.o eigen_cpu.o database_cpu.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 
