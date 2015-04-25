@@ -27,8 +27,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep);
 
 void substract_average_gpu_kernel(float *d_data, float *d_average, int size, int size_image);
 
-//TODO
-struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, struct ImageGPU **images, float *d_images, int k, int add_to_dataset);
+struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, struct ImageGPU **images,int use_original_images, int k, int add_to_dataset);
 
 //TODO
 struct FaceCoordinatesGPU * get_closest_match_gpu(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face);

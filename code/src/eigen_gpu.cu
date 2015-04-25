@@ -509,10 +509,10 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
 }
 
 // TODO
-// Assumes images is valid and dataset not NULL
-// If the images are already loaded on GPU, set images to NULL and use
-// d_images, otherwise set d_images to NULL and use images
-struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, struct ImageGPU **images, float *d_images, int k, int add_to_dataset)
+// Assumes images are valid and dataset not NULL
+// Set use_original_images to 1 to compute coordinates of original images
+// (already loaded on GPU), otherwise set it yo 0 and use images
+struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, struct ImageGPU **images,int use_original_images, int k, int add_to_dataset)
 {
     int w = dataset->w;
     int h = dataset->h;
@@ -521,6 +521,23 @@ struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, stru
     Timer timer;
     INITIALIZE_TIMER(timer);
 
+    float *d_images_to_use;
+    if (use_original_images) {
+        d_images_to_use = dataset->d_original_images;
+    } else {
+        GPU_CHECKERROR(
+        cudaMalloc((void **)&d_images_to_use, k * w * h * sizeof(float))
+        );
+        for (int i = 0; i < k; i++) {
+            GPU_CHECKERROR(
+            cudaMemcpy((void*)(d_images_to_use + i * w * h),
+            (void*)(images[i]->data),
+            w * h * sizeof(float),
+            cudaMemcpyHostToDevice)
+            );
+        }
+    }
+
     struct FaceCoordinatesGPU **new_faces = (struct FaceCoordinatesGPU **)malloc(k * sizeof(struct FaceCoordinatesGPU *));
     TEST_MALLOC(new_faces);
 
@@ -528,8 +545,11 @@ struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, stru
         new_faces[i] = (struct FaceCoordinatesGPU *)malloc(sizeof(struct FaceCoordinatesGPU));
         TEST_MALLOC(new_faces[i]);
         struct FaceCoordinatesGPU *current_face = new_faces[i];
-        struct ImageGPU *current_image = images[i];
-        strcpy(current_face->name, current_image->filename);
+        if (use_original_images)
+            strcpy(current_face->name, dataset->original_names[i]);
+        else
+            strcpy(current_face->name, images[i]->filename);
+
         char *c = strrchr(current_face->name, '.');
         if (c)
             *c = '\0';
@@ -541,8 +561,7 @@ struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, stru
         TEST_MALLOC(current_face->coordinates);
 
         for (int j = 0; j < num_eigens; j++)
-            current_face->coordinates[j] = dot_product_cpu(current_image->data,
-                                                dataset->eigenfaces[j]->data, w * h);
+            current_face->coordinates[j] = dot_product_gpu(d_images_to_use + i * w * h, dataset->d_eigenfaces[j * w * h], w * h);
 
         /*for (int j = 0; j < num_eigens; j++)
             printf("%f ", current_face->coordinates[j]);
@@ -556,6 +575,10 @@ struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, stru
 
         for (int i = n; i < n + k; i++)
             dataset->faces[i] = new_faces[i - n];
+    }
+    FREE_TIMER(timer);
+    if (!use_original_images) {
+        GPU_CHECKERROR(cudaFree(d_images_to_use));
     }
     return new_faces;
 }
