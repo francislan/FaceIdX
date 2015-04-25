@@ -9,6 +9,7 @@
 #include "misc.h"
 
 #define THREADS_PER_BLOCK 256
+#define THRES_EIGEN 1.0
 
 struct DatasetGPU * create_dataset_and_compute_all_gpu(const char *path, const char *name)
 {
@@ -342,6 +343,15 @@ void substract_average_gpu_kernel(float *d_data, float *d_average, int size, int
         d_data[i] -= d_average[i % (size_image)];
 }
 
+// total_size = unitary_size * count
+__global__
+void transpose_matrix_gpu_kernel(float *d_input, *d_output, int total_size, int unitary_size, int count)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < total_size)
+        d_output[(i % size) * count + (i / size)] = d_input[i];
+}
+
 // TODO
 // not finished at all
 // The number of orignal images is limited by the GPU's memory size
@@ -410,63 +420,91 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     qsort(eigenvalues, n, 2 * sizeof(float), comp_eigenvalues);
     for (int i = 0; i < n; i++) {
         //PRINT("DEBUG", "Eigenvalue #%d (index %d): %f\n", i, (int)eigenvalues[2 * i + 1], eigenvalues[2 * i]);
-        if (eigenvalues[2 * i] > 0.5)
+        if (eigenvalues[2 * i] > THRES_EIGEN)
             num_eigenvalues_not_zero++;
     }
+    // TODO: think of a better solution
     num_to_keep = num_eigenvalues_not_zero;
-/*
-    // Convert size n eigenfaces to size w*h
     dataset->num_eigenfaces = num_to_keep;
-    dataset->eigenfaces = (struct ImageGPU **)malloc(num_to_keep * sizeof(struct ImageGPU *));
-    TEST_MALLOC(dataset->eigenfaces);
-    for (int i = 0; i < num_to_keep; i++) {
-        dataset->eigenfaces[i] = (struct ImageGPU *)malloc(sizeof(struct ImageGPU));
-        TEST_MALLOC(dataset->eigenfaces[i]);
-        dataset->eigenfaces[i]->data = (float *)malloc(w * h * sizeof(float));
-        TEST_MALLOC(dataset->eigenfaces[i]->data);
-        dataset->eigenfaces[i]->w = w;
-        dataset->eigenfaces[i]->h = h;
-        dataset->eigenfaces[i]->comp = 1;
-        dataset->eigenfaces[i]->req_comp = 1;
-        sprintf(dataset->eigenfaces[i]->filename, "Eigen_%d", i);
-    }
+
+    // Convert size n eigenfaces to size w*h
+    float sqrt_n = sqrt(n);
+    float *d_A_trans;
+    float *d_small_eigenfaces;
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&d_A_trans, n * w * h * sizeof(float))
+    );
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&d_small_eigenfaces, n * n * sizeof(float))
+    );
+    GPU_CHECKERROR(
+    cudaMemcpy((void*)d_small_eigenfaces,
+               (void*)eigenfaces,
+               n * n * sizeof(float),
+               cudaMemcpyHostToDevice)
+    );
 
     START_TIMER(timer);
-    float sqrt_n = sqrt(n);
+    transpose_matrix_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(dataset->d_original_images, d_A_trans, n * w * h, w * h, n);
+    cudaError_t cudaerr = cudaDeviceSynchronize();
+    if (cudaerr != CUDA_SUCCESS) {
+        PRINT("BUG", "kernel launch failed with error \"%s\"\n",
+               cudaGetErrorString(cudaerr));
+        exit(EXIT_FAILURE);
+    }
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_gpu: Time to transpose matrix A: %f\n", timer.time);
+
+    float *h_big_eigenfaces = (float *)malloc(num_to_keep * w * h * sizeof(float));
+    TEST_MALLOC(h_big_eigenfaces);
+
+    START_TIMER(timer);
     for (int i = 0; i < num_to_keep; i++) {
         int index = (int)eigenvalues[2 * i + 1];
         for (int j = 0; j < w * h; j++) {
-            float temp = 0;
-            for (int k = 0; k < n; k++)
-                temp += images_minus_average[k][j] * eigenfaces[k * n + index];
-            dataset->eigenfaces[i]->data[j] = temp / sqrt_n;
+            h_big_eigenfaces[i * w * h + j] = dot_product_gpu(d_A_trans + j * n, d_small_eigenfaces + index * n, n) / sqrt_n;
         }
-        normalize_cpu(dataset->eigenfaces[i]->data, w * h);
     }
     STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_gpu: Time to transform eigenfaces to w * h: %f\n", timer.time);
+    PRINT("INFO", "compute_eigenfaces_gpu: Time to transform eigenfaces to w * h (before normalization): %f\n", timer.time);
 
-    PRINT("DEBUG", "Transforming eigenfaces... done\n");
-*/
     // Copying eigenfaces to GPU
     START_TIMER(timer);
     GPU_CHECKERROR(
     cudaMalloc((void **)&(dataset->d_eigenfaces), num_to_keep * w * h * sizeof(float))
     );
-    for (int i = 0; i < num_to_keep; i++) {
-        GPU_CHECKERROR(
-        cudaMemcpy((void*)&(dataset->d_eigenfaces[i * w * h]),
-                   (void*)dataset->eigenfaces[i]->data,
-                   w * h * sizeof(float),
-                   cudaMemcpyHostToDevice)
-        );
-    }
+    GPU_CHECKERROR(
+    cudaMemcpy((void*)dataset->d_eigenfaces,
+               (void*)h_big_eigenfaces,
+               num_to_keep * w * h * sizeof(float),
+               cudaMemcpyHostToDevice)
+    );
     STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_gpu: Time to copy eigenfaces to GPU: %f\n", timer.time);
 
+    // Normalizing eigenfaces on GPU
+    START_TIMER(timer);
+    for (int i = 0; i < num_to_keep; i++) {
+        normalize_gpu(dataset->d_eigenfaces + i * w * h, w * h);
+        cudaError_t cudaerr = cudaDeviceSynchronize();
+        if (cudaerr != CUDA_SUCCESS) {
+            PRINT("BUG", "kernel launch failed with error \"%s\"\n",
+                  cudaGetErrorString(cudaerr));
+            exit(EXIT_FAILURE);
+        }
+    }
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_gpu: Time to normalize eigenfaces on GPU: %f\n", timer.time);
+    PRINT("DEBUG", "Transforming eigenfaces... done\n");
+
+    GPU_CHECKERROR(cudaFree(d_A_trans));
+    GPU_CHECKERROR(cudaFree(d_small_eigenfaces));
     free(covariance_matrix);
     free(eigenfaces);
     free(eigenvalues);
+    free(h_big_eigenfaces);
+    FREE_TIMER(imer);
+
     return 0;
 }
 

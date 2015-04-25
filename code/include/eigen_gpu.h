@@ -16,10 +16,13 @@ __global__ void compute_average_gpu_kernel(float *d_images, int w, int h, int nu
 __global__ void dot_product_gpu(float *d_a, float *d_b, int size, float *d_result);
 float dot_product_gpu(float *d_a, float *d_b, int size);
 
+__global__ void transpose_matrix_gpu_kernel(float *d_input, *d_output, int total_size, int unitary_size, int count);
+
 //TODO
 void jacobi_gpu(const float *a, const int n, float *v, float *e);
 
-//TODO
+//TODO: dot product version *should* be working, waiting for matrix
+//multiplication version
 int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep);
 
 void substract_average_gpu_kernel(float *d_data, float *d_average, int size, int size_image);
@@ -30,5 +33,7 @@ struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, stru
 //TODO
 struct FaceCoordinatesGPU * get_closest_match_gpu(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face);
 
+//TODO
+__global__ void matrix_mult_gpu_kernel(float *d_A, float *d_B, float *d_C, int w_A, int h_A, int w_B);
 
 #endif
