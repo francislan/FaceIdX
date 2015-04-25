@@ -32,14 +32,11 @@ struct DatasetGPU {
 	int num_new_faces;
 	int w;
 	int h;
-	struct ImageGPU **original_images; //malloc
-	struct ImageGPU *average; //malloc
-	struct ImageGPU **eigenfaces; //malloc
 	struct FaceCoordinatesGPU **faces; //malloc
+	char **original_names; //names of original images
 	float *d_original_images; // no need to realloc
 	float *d_average;
 	float *d_eigenfaces;
-	float **d_faces; // number of faces can be increased during exectution
 };
 
 struct ImageGPU * load_image_gpu(const char *filename, int req_comp);
@@ -50,6 +47,8 @@ struct DatasetGPU * load_dataset_gpu(const char *dataset_path);
 int save_dataset_to_disk_gpu(struct DatasetGPU *dataset, const char *path);
 void free_dataset_gpu(struct DatasetGPU *dataset);
 void save_image_to_disk_gpu(struct ImageGPU *image, const char *name);
+
+// TODO
 void save_reconstructed_face_to_disk_gpu(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face, int num_eigenfaces);
 int add_faces_and_compute_coordinates_gpu(struct DatasetGPU *dataset, const char *path);
 void identify_face_gpu(struct DatasetGPU *dataset, const char *path);

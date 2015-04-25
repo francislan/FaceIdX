@@ -25,7 +25,6 @@ struct ImageGPU * load_image_gpu(const char *filename, int req_comp)
 
     for (int j = 0; j < image->w * image->h; j++)
         image->data[j] = image_data[j];
-    //normalize_cpu(image->data, image->w * image->h);
 
     stbi_image_free(image_data);
     return image;
@@ -79,7 +78,9 @@ struct DatasetGPU * create_dataset_gpu(const char *directory, const char *name)
     PRINT("INFO", "%d images found in directory.\n", num_images);
 
     fclose(fp);
-    fp = popen(command, "r"); // run the command twice, not optimal, and possible exploit
+    fp = popen(command, "r"); // run the command twice, not optimal, and
+                              // possible exploit if the contents of the
+                              // dir is modified between the two shell commands
 
     dataset = (struct DatasetGPU *)malloc(sizeof(struct DatasetGPU));
 
@@ -87,8 +88,15 @@ struct DatasetGPU * create_dataset_gpu(const char *directory, const char *name)
     strcpy(dataset->name, name);
     dataset->path = "";
     dataset->num_original_images = num_images;
-    dataset->original_images = (struct ImageGPU **)malloc(num_images * sizeof(struct ImageGPU *));
-    TEST_MALLOC(dataset->original_images);
+
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&(dataset->d_original_images), num_images * w * h * sizeof(float))
+    );
+
+    dataset->original_names = (char *)malloc(num_images * sizeof(char *));
+    TEST_MALLOC(dataset->original_names);
+
+    struct ImageGPU *temp = NULL;
 
     while (getline(&line, &len, fp) != -1) {
         if (line[strlen(line) - 1] == '\n')
@@ -97,58 +105,46 @@ struct DatasetGPU * create_dataset_gpu(const char *directory, const char *name)
         strcpy(image_name, directory);
         strcat(image_name, "/");
         strcat(image_name, line);
-        dataset->original_images[i] = load_image_gpu(image_name, 1);
-	strcpy(dataset->original_images[i]->filename, line); // buffer overflow
+        temp = load_image_gpu(image_name, 1);
+        dataset->original_names[i] = strdup(line);
+        TEST_MALLOC(dataset->original_names[i]);
+
         if (i == 0) {
-            w = dataset->original_images[0]->w;
-            h = dataset->original_images[0]->h;
+            w = temp->w;
+            h = temp->h;
         } else {
-            if (w != dataset->original_images[i]->w || h != dataset->original_images[i]->h) {
-                PRINT("WARN", "ImageGPUs in directory have different width and/or height. Aborting\n");
+            if (w != temp->w || h != temp->h) {
+                PRINT("WARN", "Images in directory have different width and/or height. Aborting\n");
                 free_dataset_gpu(dataset);
                 dataset = NULL;
                 goto end;
             }
         }
-        i++;
-        PRINT("DEBUG", "Loading file: %s\n", dataset->original_images[i-1]->filename);
-    }
-
-    START_TIMER(timer);
-    GPU_CHECKERROR(
-    cudaMalloc((void **)&(dataset->d_original_images), num_images * w * h * sizeof(float))
-    );
-    STOP_TIMER(timer);
-    PRINT("INFO", "Time allocating original_images on GPU: %fms.\n", timer.time);
-    START_TIMER(timer);
-    for (int i = 0; i < num_images; i++) {
         GPU_CHECKERROR(
         cudaMemcpy((void*)(dataset->d_original_images + i * w * h),
-                   (void*)dataset->original_images[i]->data,
+                   (void*)temp->data,
                    w * h * sizeof(float),
                    cudaMemcpyHostToDevice)
         );
+        free_image_gpu(temp);
+        i++;
+        PRINT("DEBUG", "Loading file: %s\n", dataset->original_images[i-1]->filename);
     }
-    STOP_TIMER(timer);
-    PRINT("INFO", "Time copying original_images to GPU: %fms.\n", timer.time);
-
 
     dataset->w = w;
     dataset->h = h;
     dataset->num_eigenfaces = 0;
     dataset->num_faces = 0;
     dataset->num_new_faces = 0;
-    dataset->average = NULL;
-    dataset->eigenfaces = NULL;
-    dataset->faces = NULL;
     dataset->d_average = NULL;
     dataset->d_eigenfaces = NULL;
-    dataset->d_faces = NULL;
+    dataset->faces = NULL;
 
 end:
     fclose(fp);
     if (line)
         free(line);
+    free_image_gpu(temp);
 
     return dataset;
 }
@@ -170,9 +166,10 @@ struct DatasetGPU * load_dataset_gpu(const char *path)
     dataset->num_new_faces = 0;
     dataset->w = 0;
     dataset->h = 0;
-    dataset->original_images = NULL;
-    dataset->average = NULL;
-    dataset->eigenfaces = NULL;
+    dataset->d_original_images = NULL;
+    dataset->original_names = NULL;
+    dataset->d_average = NULL;
+    dataset->d_eigenfaces = NULL;
     dataset->faces = NULL;
 
     for (int i = 0; i < 100; i++) {
@@ -186,45 +183,48 @@ struct DatasetGPU * load_dataset_gpu(const char *path)
     int h = dataset->h;
     fread(&(dataset->num_eigenfaces), sizeof(int), 1, f);
 
-    dataset->average = (struct ImageGPU *)malloc(sizeof(struct ImageGPU));
-    TEST_MALLOC(dataset->average);
+    float *temp = (float *)malloc(w * h * sizeof(float));
+    TEST_MALLOC(temp);
 
-    dataset->average->w = w;
-    dataset->average->h = h;
-    dataset->average->comp = 1;
-    dataset->average->req_comp = 1;
-    dataset->average->data = (float *)malloc(w * h * sizeof(float));
-    TEST_MALLOC(dataset->average->data);
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&(dataset->d_average), w * h * sizeof(float))
+    );
+
+    char c;
+
     for (int i = 0; i < 100; i++) {
-        fread(dataset->average->filename + i, sizeof(char), 1, f);
-        if (dataset->average->filename[i] == '\0')
+        fread(&c, sizeof(char), 1, f);
+        if (c == '\0')
             break;
     }
-    fread(dataset->average->data, w * h * sizeof(float), 1, f);
+    fread(temp, w * h * sizeof(float), 1, f);
+    GPU_CHECKERROR(
+    cudaMemcpy((void*)(dataset->d_original_images + i * w * h),
+               (void*)temp->data,
+               w * h * sizeof(float),
+               cudaMemcpyHostToDevice)
+    );
 
-    dataset->eigenfaces = (struct ImageGPU **)malloc(dataset->num_eigenfaces * sizeof(struct ImageGPU *));
-    TEST_MALLOC(dataset->eigenfaces);
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&(dataset->d_eigenfaces), num_eigenfaces * w * h * sizeof(float))
+    );
 
     for (int i = 0; i < dataset->num_eigenfaces; i++) {
-        dataset->eigenfaces[i] = (struct ImageGPU *)malloc(sizeof(struct ImageGPU));
-        TEST_MALLOC(dataset->eigenfaces[i]);
-
-        dataset->eigenfaces[i]->w = w;
-        dataset->eigenfaces[i]->h = h;
-        dataset->eigenfaces[i]->comp = 1;
-        dataset->eigenfaces[i]->req_comp = 1;
-        dataset->eigenfaces[i]->data = (float *)malloc(w * h * sizeof(float));
-        TEST_MALLOC(dataset->eigenfaces[i]->data);
         for (int k = 0; k < 100; k++) {
-            fread(dataset->eigenfaces[i]->filename + k, sizeof(char), 1, f);
-            if (dataset->eigenfaces[i]->filename[k] == '\0')
+            fread(&c, sizeof(char), 1, f);
+            if (&c == '\0')
                break;
         }
-        fread(dataset->eigenfaces[i]->data, w * h * sizeof(float), 1, f);
+        fread(temp, w * h * sizeof(float), 1, f);
+        GPU_CHECKERROR(
+        cudaMemcpy((void*)(dataset->d_eigenfaces + i * w * h),
+                   (void*)temp->data,
+                   w * h * sizeof(float),
+                   cudaMemcpyHostToDevice)
+        );
     }
 
     int current_size = 0;
-    char c;
     int num_allocated_faces = 50;
     dataset->faces = (struct FaceCoordinatesGPU **)malloc(num_allocated_faces * sizeof(struct FaceCoordinatesGPU *));
     TEST_MALLOC(dataset->faces);
@@ -287,6 +287,10 @@ int save_dataset_to_disk_gpu(struct DatasetGPU *dataset, const char *path)
         dataset->num_new_faces = 0;
         fclose(f);
     } else {
+        int w = dataset->w;
+        int h = dataset->h;
+        float *temp = (float *)malloc(w * h * sizeof(float));
+        TEST_MALLOC(temp);
         FILE *f = fopen(path, "wb");
         if (f == NULL) {
             PRINT("WARNING", "Unable to create file %s!\n", path);
@@ -294,13 +298,19 @@ int save_dataset_to_disk_gpu(struct DatasetGPU *dataset, const char *path)
         }
         fwrite(dataset->name, sizeof(char), strlen(dataset->name), f);
         fwrite("\0", sizeof(char), 1, f);
-        fwrite(&(dataset->w), sizeof(int), 1, f);
-        fwrite(&(dataset->h), sizeof(int), 1, f);
+        fwrite(&w, sizeof(int), 1, f);
+        fwrite(&h, sizeof(int), 1, f);
         fwrite(&(dataset->num_eigenfaces), sizeof(int), 1, f);
 
         fwrite("Average", sizeof(char), strlen("Average"), f);
         fwrite("\0", sizeof(char), 1, f);
-        fwrite(dataset->average->data, dataset->w * dataset-> h * sizeof(float), 1, f);
+        GPU_CHECKERROR(
+        cudaMemcpy((void*)temp,
+                   (void*)dataset->d_average,
+                   w * h * sizeof(float),
+                   cudaMemcpyDeviceToHost)
+        );
+        fwrite(temp, w * h * sizeof(float), 1, f);
 
         char name[100] = "";
 
@@ -308,7 +318,13 @@ int save_dataset_to_disk_gpu(struct DatasetGPU *dataset, const char *path)
             sprintf(name, "Eigen %d", i);
             fwrite(name, sizeof(char), strlen(name), f);
             fwrite("\0", sizeof(char), 1, f);
-            fwrite(dataset->eigenfaces[i]->data, dataset->w * dataset->h * sizeof(float), 1, f);
+            GPU_CHECKERROR(
+            cudaMemcpy((void*)temp,
+                       (void*)dataset->d_eigenfaces + i * w * h,
+                       w * h * sizeof(float),
+                       cudaMemcpyDeviceToHost)
+            );
+            fwrite(temp, w * h * sizeof(float), 1, f);
         }
 
         // Do not write a '\0' at end of file
@@ -334,19 +350,23 @@ void free_dataset_gpu(struct DatasetGPU *dataset)
 {
     if (dataset == NULL)
 	return;
-    for (int i = 0; i < dataset->num_original_images; i++)
-	free_image_gpu(dataset->original_images[i]);
-    free(dataset->original_images);
-
-    for (int i = 0; i < dataset->num_eigenfaces; i++)
-	free_image_gpu(dataset->eigenfaces[i]);
-    free(dataset->eigenfaces);
-
+    if (dataset->d_original_images) {
+        GPU_CHECKERROR(cudaFree(dataset->d_original_images));
+    }
+    if (dataset->d_eigenfaces) {
+        GPU_CHECKERROR(cudaFree(dataset->d_eigenfaces));
+    }
     for (int i = 0; i < dataset->num_faces; i++)
 	free_face_gpu(dataset->faces[i]);
-    free(dataset->faces);
+    if (dataset->faces)
+        free(dataset->faces);
 
-    free_image_gpu(dataset->average);
+    GPU_CHECKERROR(cudaFree(dataset->d_average));
+    if (dataset->num_original_images > 0)
+        for (int i = 0; i < dataset->num_original_images; i++)
+            free(dataset->original_names[i]);
+    if (dataset->original_names)
+        free(dataset->original_names);
     free(dataset);
 }
 
