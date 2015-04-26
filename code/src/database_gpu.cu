@@ -396,6 +396,16 @@ void save_image_to_disk_gpu(struct ImageGPU *image, const char *name)
     free(image_data);
 }
 
+__global__
+void reconstruct_face_gpu_kernel(float *d_output, float *d_average, float *d_coordinates, float *d_eigenfaces, int num_eigens, int size)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < size) {
+        d_output[i] = d_average[i];
+        for (int k = 0; k < num_eigens; k++)
+            d_output[i] += d_coordinates[k] * d_eigenfaces[k * size + i];
+    }
+}
 
 void save_reconstructed_face_to_disk(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face, int num_eigenfaces)
 {
@@ -409,15 +419,44 @@ void save_reconstructed_face_to_disk(struct DatasetGPU *dataset, struct FaceCoor
     TEST_MALLOC(image->data);
 
     int n = num_eigenfaces > face->num_eigenfaces ? face->num_eigenfaces : num_eigenfaces;
-    for (int i = 0; i < n; i++) {
-        float weight = face->coordinates[i];
-        for (int j = 0; j < image->w * image->h; j++)
-            image->data[j] += weight * dataset->eigenfaces[i]->data[j];
+    float *d_temp;
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&d_temp, w * h * sizeof(float))
+    );
+    float *d_coordinates;
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&d_coordinates, n * sizeof(float))
+    );
+    GPU_CHECKERROR(
+    cudaMemcpy((void*)d_coordinates,
+               (void*)face->coordinates,
+               n * sizeof(float),
+               cudaMemcpyHostToDevice)
+    );
+
+    int num_blocks = ceil(w * h / 1024.0);
+    dim3 dimOfGrid(num_blocks, 1, 1);
+    dim3 dimOfBlock(1024, 1, 1);
+    if (num_blocks == 1)
+        dimOfBlock.x = ceil(size / 32.0) * 32;
+
+    reconstruct_face_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_temp, dataset->d_average, d_coordinates, dataset->d_eigenfaces, n, w * h);
+    cudaError_t cudaerr = cudaDeviceSynchronize();
+    if (cudaerr != CUDA_SUCCESS) {
+        PRINT("BUG", "kernel launch failed with error \"%s\"\n",
+               cudaGetErrorString(cudaerr));
+        exit(EXIT_FAILURE);
     }
 
-    for (int j = 0; j < image->w * image->h; j++)
-        image->data[j] += dataset->average->data[j];
+    GPU_CHECKERROR(
+    cudaMemcpy((void*)image->data,
+               (void*)d_temp,
+               w * h * sizeof(float),
+               cudaMemcpyDeviceToHost)
+    );
+    cudaDeviceSynchronize();
 
+    //TODO Do that on GPU
     float min = image->data[0];
     float max = image->data[0];
     for (int j = 1; j < image->w * image->h; j++) {
