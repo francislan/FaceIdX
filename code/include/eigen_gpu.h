@@ -21,6 +21,8 @@ void jacobi_gpu(const float *a, const int n, float *v, float *e);
 
 //TODO
 int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep);
+void matrix_mult_gpu(float *d_A, float *d_B, float *d_C, int w_A, int h_A, int w_B);
+__global__ void matrix_mult_gpu_kernel(float *d_A, float *d_B, float *d_C, int w_A, int h_A, int w_B);
 
 void substract_average_gpu_kernel(float *d_data, float *d_average, int size, int size_image);
 
