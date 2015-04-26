@@ -65,11 +65,10 @@ struct DatasetGPU * create_dataset_and_compute_all_gpu(const char *path, const c
     return dataset;
 }
 
-// TODO
 void normalize_gpu(float *d_array, int size)
 {
     float norm = sqrt(dot_product_gpu(d_array, d_array, size));
-    dim3 dimOfGrid(ceil(size / 1024), 1, 1);
+    dim3 dimOfGrid(ceil(size / 1024.0), 1, 1);
     dim3 dimOfBlock(1024, 1, 1);
 
     divide_by_float_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_array, norm, size);
@@ -116,7 +115,7 @@ struct ImageGPU * compute_average_gpu(struct DatasetGPU * dataset)
     PRINT("INFO", "Time allocating average Image on GPU: %f\n", timer.time);
 
     START_TIMER(timer);
-    dim3 dimOfGrid(ceil(w * 1.0 / 32), ceil(h * 1.0 / 32), 1);
+    dim3 dimOfGrid(ceil(w / 32.0), ceil(h / 32.0), 1);
     dim3 dimOfBlock(32, 32, 1);
     compute_average_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(dataset->d_original_images, w, h, n, dataset->d_average);
     cudaError_t cudaerr = cudaDeviceSynchronize();
@@ -192,15 +191,16 @@ void dot_product_gpu_kernel(float *d_a, float *d_b, int size, float *d_partial_s
     }
     if (i == 0)
         d_partial_sum[blockIdx.x] = s_thread_sums[0];
-    return;
 }
 
 float dot_product_gpu(float *d_a, float *d_b, int size)
 {
-    int num_blocks = ceil(size / 1024);
-    int size_shared_mem = num_blocks * sizeof(float);
+    int num_blocks = ceil(size / 1024.0);
     dim3 dimOfGrid(num_blocks, 1, 1);
     dim3 dimOfBlock(1024, 1, 1);
+    if (num_blocks == 1)
+        dimOfBlock.x = ceil(size / 32.0) * 32;
+    int size_shared_mem = dimOfBlock.x * sizeof(float);
 
     float *d_partial_sum;
     GPU_CHECKERROR(
@@ -366,7 +366,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     INITIALIZE_TIMER(timer);
 
     // Substract average to images
-    dim3 dimOfGrid(ceil(w * h * n / 1024), 1, 1);
+    dim3 dimOfGrid(ceil(w * h * n / 1024.0), 1, 1);
     dim3 dimOfBlock(1024, 1, 1);
 
     START_TIMER(timer);
@@ -583,7 +583,83 @@ struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, stru
     return new_faces;
 }
 
-// TODO
+__global__
+void euclidian_distance_square_gpu_kernel(float *d_a, float *d_b, int size, float *d_partial_sum)
+{
+    extern __shared__ float s_thread_sums[];
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < size) {
+        float diff = d_a[i] - d_b[i];
+        s_thread_sums[i] = diff * diff;
+    } else {
+        s_thread_sums[i] = 0;
+    }
+    __syncthreads();
+
+    // Reduction
+    for (int stride = blockDim.x / 2; stride > 32; stride /= 2) {
+        if (i < stride)
+            s_thread_sums[i] += s_thread_sums[i + stride];
+        __syncthreads();
+    }
+    if (i < 32) {
+        volatile float *cache = s_thread_sums;
+        cache[i] += cache[i + 32];
+        cache[i] += cache[i + 16];
+        cache[i] += cache[i + 8];
+        cache[i] += cache[i + 4];
+        cache[i] += cache[i + 2];
+        cache[i] += cache[i + 1];
+    }
+    if (i == 0)
+        d_partial_sum[blockIdx.x] = s_thread_sums[0];
+}
+
+float euclidian_distance_gpu(float *d_a, float *d_b, int size)
+{
+    int num_blocks = (size + 1023) / 1024;
+    dim3 dimOfGrid(num_blocks, 1, 1);
+    dim3 dimOfBlock(1024, 1, 1);
+    if (num_blocks == 1)
+        dimOfBlock.x = ceil(size / 32.0) * 32;
+    int size_shared_mem = dimOfBlock.x * sizeof(float);
+
+    float *d_partial_sum;
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&d_partial_sum, num_blocks * sizeof(float))
+    );
+    float *h_partial_sum = (float *)malloc(num_blocks * sizeof(float));
+    TEST_MALLOC(h_partial_sum);
+    float result = 0;
+
+    euclidian_distance_square_gpu_kernel<<<dimOfGrid, dimOfBlock, size_shared_mem>>>(d_a, d_b, size, d_partial_sum);
+    cudaError_t cudaerr = cudaDeviceSynchronize();
+    if (cudaerr != CUDA_SUCCESS) {
+        PRINT("BUG", "kernel launch failed with error \"%s\"\n",
+               cudaGetErrorString(cudaerr));
+        exit(EXIT_FAILURE);
+    }
+
+    GPU_CHECKERROR(
+    cudaMemcpy((void*)h_partial_sum,
+               (void*)d_partial_sum,
+               num_blocks * sizeof(float),
+               cudaMemcpyDeviceToHost)
+    );
+    cudaDeviceSynchronize();
+
+    for (int i = 0; i < num_blocks; i++)
+        result += h_partial_sum[i];
+    result = sqrt(result);
+
+    GPU_CHECKERROR(cudaFree(d_partial_sum));
+    free(h_partial_sum);
+
+    return result;
+}
+
+// TODO add a threshold
+// Test with streams to see if there is improvement
 struct FaceCoordinatesGPU * get_closest_match_gpu(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face)
 {
     float min = INFINITY;
