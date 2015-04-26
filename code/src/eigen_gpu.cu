@@ -520,13 +520,24 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     GPU_CHECKERROR(
     cudaMalloc((void **)&(dataset->d_eigenfaces), num_to_keep * w * h * sizeof(float))
     );
+/*
     GPU_CHECKERROR(
     cudaMemcpy((void*)dataset->d_eigenfaces,
                (void*)d_big_eigenfaces,
                num_to_keep * w * h * sizeof(float),
                cudaMemcpyDeviceToDevice)
     );
-    STOP_TIMER(timer);
+*/	
+	
+	transpose_matrix_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_big_eigenfaces, dataset->d_eigenfaces, num_to_keep * w * h, num_to_keep, w *h);
+    cudaerr = cudaDeviceSynchronize();
+    if (cudaerr != CUDA_SUCCESS) {
+        PRINT("BUG", "kernel launch failed with error \"%s\"\n",
+               cudaGetErrorString(cudaerr));
+        exit(EXIT_FAILURE);
+    }
+    
+	STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_gpu: Time to copy eigenfaces to GPU: %f\n", timer.time);
 
     // Normalizing eigenfaces on GPU
@@ -552,7 +563,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     free(eigenvalues);
     free(h_small_eigenfaces);
     free(h_big_eigenfaces);
-    FREE_TIMER(imer);
+    FREE_TIMER(timer);
 
     return 0;
 }
@@ -577,11 +588,11 @@ void matrix_mult_gpu_kernel(float *M, float *N, float *C, int w_M, int h_M, int 
 	for(int p = 0; p < w_M/TILE_WIDTH; ++p)
 	{ 
     	// collaboratively load tiles into __shared__
-		if( p*TILE_WIDTH + tx >= w_M || row > h_M )
+		if( p*TILE_WIDTH + tx >= w_M || row >= h_M )
 			s_M[ty][tx] = 0;
 		else	s_M[ty][tx] = M[row*w_M + (p*TILE_WIDTH + tx)];
     	
-		if( p*TILE_WIDTH + ty >= h_N || col > w_N)
+		if( p*TILE_WIDTH + ty >= h_N || col >= w_N)
 			s_N[ty][tx] = 0;
 		else	s_N[ty][tx] = N[(p*TILE_WIDTH + ty)*w_M + col];
     	
