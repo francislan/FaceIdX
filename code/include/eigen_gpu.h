@@ -29,11 +29,11 @@ void substract_average_gpu_kernel(float *d_data, float *d_average, int size, int
 
 struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, struct ImageGPU **images,int use_original_images, int k, int add_to_dataset);
 
-//TODO
-struct FaceCoordinatesGPU * get_closest_match_gpu(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face);
-
 __global__ void euclidian_distance_square_gpu_kernel(float *d_a, float *d_b, int size, float *d_partial_sum);
 float euclidian_distance_gpu(float *d_a, float *d_b, int size);
+struct FaceCoordinatesGPU * get_closest_match_gpu(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face);
+
+//TODO
 __global__ void matrix_mult_gpu_kernel(float *d_A, float *d_B, float *d_C, int w_A, int h_A, int w_B);
 
 #endif

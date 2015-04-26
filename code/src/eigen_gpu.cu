@@ -353,7 +353,6 @@ void transpose_matrix_gpu_kernel(float *d_input, *d_output, int total_size, int 
 }
 
 // TODO
-// not finished at all
 // The number of orignal images is limited by the GPU's memory size
 // For 2Gb of memory, about 10k of 200*250 images can be stored
 // So the number of threads is not a bottleneck
@@ -617,7 +616,7 @@ void euclidian_distance_square_gpu_kernel(float *d_a, float *d_b, int size, floa
 
 float euclidian_distance_gpu(float *d_a, float *d_b, int size)
 {
-    int num_blocks = (size + 1023) / 1024;
+    int num_blocks = ceil(size / 1024.0);
     dim3 dimOfGrid(num_blocks, 1, 1);
     dim3 dimOfBlock(1024, 1, 1);
     if (num_blocks == 1)
