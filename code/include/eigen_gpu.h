@@ -34,7 +34,4 @@ __global__ void euclidian_distance_square_gpu_kernel(float *d_a, float *d_b, int
 float euclidian_distance_gpu(float *d_a, float *d_b, int size);
 struct FaceCoordinatesGPU * get_closest_match_gpu(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face);
 
-//TODO
-__global__ void matrix_mult_gpu_kernel(float *d_A, float *d_B, float *d_C, int w_A, int h_A, int w_B);
-
 #endif

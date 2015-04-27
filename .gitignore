@@ -4,3 +4,5 @@
 *.o
 Eigenface*.png
 Minus*.png
+FaceIdx
+average*.png

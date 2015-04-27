@@ -431,17 +431,15 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
 
     // Convert size n eigenfaces to size w*h
     float *h_small_eigenfaces = (float *)malloc(num_to_keep * n * sizeof(float));
-    TEST_MALLOC(h_small_eigenfaces);    
-	float sqrt_n = sqrt(n);
+    TEST_MALLOC(h_small_eigenfaces);
     for (int i = 0; i < num_to_keep; i++) {
         int index = (int)eigenvalues[2 * i + 1];
         for (int j = 0; j < n; j++)
-            h_small_eigenfaces[j*num_to_keep+index] = eigenfaces[j*n+index] / sqrt_n;
+            h_small_eigenfaces[j * num_to_keep + index] = eigenfaces[j * n + index];
     }
 
     float *d_A_trans;
     float *d_small_eigenfaces;
-	float *d_big_eigenfaces;
     GPU_CHECKERROR(
     cudaMalloc((void **)&d_A_trans, n * w * h * sizeof(float))
     );
@@ -468,13 +466,11 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     }
     STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_gpu: Time to transpose matrix A: %f\n", timer.time);
-	
 
-
-	START_TIMER(timer);
+    START_TIMER(timer);
     dim3 dimOfGrid_mult(ceil(num_to_keep / TILE_WIDTH), ceil(w * h / TILE_WIDTH), 1);
     dim3 dimOfBlock_mult(TILE_WIDTH, TILE_WIDTH, 1);
-    matrix_mult_gpu_kernel<<<dimOfGrid_mult, dimOfBlock_mult>>>(d_A_trans, d_small_eigenfaces, d_big_eigenfaces, n, w*h, num_to_keep, n);
+    matrix_mult_gpu_kernel<<<dimOfGrid_mult, dimOfBlock_mult>>>(d_A_trans, d_small_eigenfaces, d_big_eigenfaces, n, w * h, num_to_keep, n);
     cudaerr = cudaDeviceSynchronize();
     if (cudaerr != CUDA_SUCCESS) {
         PRINT("WARN", "kernel matrix_mult_gpu_kernel launch failed with error \"%s\"\n",
@@ -484,12 +480,10 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_gpu: Time to transform eigenfaces to w * h (before normalization): %f\n", timer.time);
 
-	
-
 /*
     float *h_big_eigenfaces = (float *)malloc(num_to_keep * w * h * sizeof(float));
     TEST_MALLOC(h_big_eigenfaces);    
-	START_TIMER(timer);
+    START_TIMER(timer);
     for (int i = 0; i < num_to_keep; i++) {
         int index = (int)eigenvalues[2 * i + 1];
         for (int j = 0; j < w * h; j++) {
@@ -527,17 +521,16 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
                num_to_keep * w * h * sizeof(float),
                cudaMemcpyDeviceToDevice)
     );
-*/	
-	
-	transpose_matrix_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_big_eigenfaces, dataset->d_eigenfaces, num_to_keep * w * h, num_to_keep, w *h);
+*/
+
+    transpose_matrix_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_big_eigenfaces, dataset->d_eigenfaces, num_to_keep * w * h, num_to_keep, w *h);
     cudaerr = cudaDeviceSynchronize();
     if (cudaerr != CUDA_SUCCESS) {
         PRINT("BUG", "kernel launch failed with error \"%s\"\n",
                cudaGetErrorString(cudaerr));
         exit(EXIT_FAILURE);
     }
-    
-	STOP_TIMER(timer);
+    STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_gpu: Time to copy eigenfaces to GPU: %f\n", timer.time);
 
     // Normalizing eigenfaces on GPU
@@ -568,45 +561,42 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     return 0;
 }
 
+__global__
+void matrix_mult_gpu_kernel(float *M, float *N, float *C, int w_M, int h_M, int w_N, int h_N)
+{
+    int tx = threadIdx.x, ty = threadIdx.y;
+    int bx = blockIdx.x, by = blockIdx.y;
 
+    // allocate tiles in __shared__ memory
+    __shared__ float s_M[TILE_WIDTH][TILE_WIDTH];
+    __shared__ float s_N[TILE_WIDTH][TILE_WIDTH];
 
+    // calculate the row & col index
+    int row = by * blockDim.y + ty;
+    int col = bx * blockDim.x + tx;
+    float result = 0;
 
-__global__ 
-void matrix_mult_gpu_kernel(float *M, float *N, float *C, int w_M, int h_M, int w_N, int h_N){
-	int tx = threadIdx.x, ty = threadIdx.y;
-	int bx = blockIdx.X,  by = blockIdx.y;
+    for (int p = 0; p < w_M/TILE_WIDTH; p++) { 
+        // collaboratively load tiles into __shared__
+        if (p * TILE_WIDTH + tx >= w_M || row >= h_M)
+            s_M[ty][tx] = 0;
+        else
+            s_M[ty][tx] = M[row * w_M + p * TILE_WIDTH + tx];
 
-	// allocate tiles in __shared__ memory
-	__shared__ float s_M[TILE_WIDTH][TILE_WIDTH];
-	__shared__ float s_N[TILE_WIDTH][TILE_WIDTH];
-	
-	// calculate the row & col index
-	int row = by*blockDim.y + ty;
-	int col = bx*blockDim.x + tx;
-	float result = 0;
-	
-	for(int p = 0; p < w_M/TILE_WIDTH; ++p)
-	{ 
-    	// collaboratively load tiles into __shared__
-		if( p*TILE_WIDTH + tx >= w_M || row >= h_M )
-			s_M[ty][tx] = 0;
-		else	s_M[ty][tx] = M[row*w_M + (p*TILE_WIDTH + tx)];
-    	
-		if( p*TILE_WIDTH + ty >= h_N || col >= w_N)
-			s_N[ty][tx] = 0;
-		else	s_N[ty][tx] = N[(p*TILE_WIDTH + ty)*w_M + col];
-    	
-		__syncthreads();
+        if (p * TILE_WIDTH + ty >= h_N || col >= w_N)
+            s_N[ty][tx] = 0;
+        else
+            s_N[ty][tx] = N[(p * TILE_WIDTH + ty) * w_M + col];
+        __syncthreads();
 
-		// dot product between row of s_M and col of s_N
-		for(int k = 0; k < TILE_WIDTH; ++k)
-  		result += s_M[ty][k] * s_N[k][tx];
-		__syncthreads();	
-	}
+        // dot product between row of s_M and col of s_N
+        for(int k = 0; k < TILE_WIDTH; k++)
+          result += s_M[ty][k] * s_N[k][tx];
+        __syncthreads();
+    }
 
-	if(row<h_W && col<w_N)
-  		C[row*w_N + col] = result;
-
+    if (row < h_W && col < w_N)
+        C[row * w_N + col] = result;
 }
 
 
