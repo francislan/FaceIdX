@@ -8,6 +8,7 @@
 #include "database_cpu.h"
 #include "eigen_gpu.h"
 #include "database_gpu.h"
+#include "load_save_image.h"
 
 void display_menu_cpu(struct DatasetCPU *dataset_cpu);
 void display_menu_gpu(struct DatasetGPU *dataset_gpu);
@@ -19,7 +20,6 @@ int main(int argc, char **argv)
 
     struct DatasetCPU *dataset_cpu = NULL;
     struct DatasetGPU *dataset_gpu = NULL;
-    struct DatasetCPU *dataset_gpu = NULL;
     int use_gpu = 1;
     if (argc == 2 && !strcmp(argv[1], "-cpu"))
         use_gpu = 0;
@@ -173,7 +173,7 @@ int main(int argc, char **argv)
             if (use_gpu) {
                 for (int i = 0; i < dataset_gpu->num_eigenfaces; i++) {
                     sprintf(name, "eigen/Eigenface %d.png", i);
-                    save_image_to_disk_gpu(dataset_gpu->eigenfaces[i], name);
+                    save_image_to_disk_gpu(dataset_gpu->d_eigenfaces + dataset_gpu->w * dataset_gpu->h * i, dataset_gpu->w, dataset_gpu->h, name);
                 }
             } else {
                 for (int i = 0; i < dataset_cpu->num_eigenfaces; i++) {

@@ -1,6 +1,7 @@
 #ifndef MISC_H
 #define MISC_H
 
+
 // error checking for CUDA calls: use this around ALL your calls!
 #define GPU_CHECKERROR(err) (gpuCheckError(err, __FILE__, __LINE__ ))
 static void gpuCheckError(cudaError_t err,

@@ -7,6 +7,7 @@
 #include "eigen_gpu.h"
 #include "database_gpu.h"
 #include "misc.h"
+#include "load_save_image.h"
 
 #define THREADS_PER_BLOCK 256
 #define TILE_WIDTH 32
@@ -41,7 +42,7 @@ struct DatasetGPU * create_dataset_and_compute_all_gpu(const char *path, const c
     printf("Done!\n");
 
     START_TIMER(timer);
-    save_image_to_disk_gpu(average, "average_gpu.png");
+    save_image_to_disk_gpu(dataset->d_average, dataset->w, dataset->h, "average_gpu.png");
     STOP_TIMER(timer);
     PRINT("INFO", "Time for saving average on disk GPU: %f\n", timer.time);
 
@@ -55,12 +56,11 @@ struct DatasetGPU * create_dataset_and_compute_all_gpu(const char *path, const c
 
     printf("Compute images coordinates...\n");
     START_TIMER(timer);
-    compute_weighs_cpu(dataset, NULL, 1, dataset->num_original_images, 1);
+    compute_weighs_gpu(dataset, NULL, 1, dataset->num_original_images, 1);
     STOP_TIMER(timer);
     PRINT("INFO", "Time for computing faces coordinates on GPU: %f\n", timer.time);
     printf("Compute images coordinates... Done!\n");
 
-    fclose(f);
     FREE_TIMER(timer);
     free_image_gpu(average);
 
@@ -75,7 +75,7 @@ void normalize_gpu(float *d_array, int size)
 
     divide_by_float_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_array, norm, size);
     cudaError_t cudaerr = cudaDeviceSynchronize();
-    if (cudaerr != CUDA_SUCCESS) {
+    if (cudaerr != cudaSuccess) {
         PRINT("BUG", "kernel launch failed with error \"%s\"\n",
                cudaGetErrorString(cudaerr));
         exit(EXIT_FAILURE);
@@ -121,7 +121,7 @@ struct ImageGPU * compute_average_gpu(struct DatasetGPU * dataset)
     dim3 dimOfBlock(32, 32, 1);
     compute_average_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(dataset->d_original_images, w, h, n, dataset->d_average);
     cudaError_t cudaerr = cudaDeviceSynchronize();
-    if (cudaerr != CUDA_SUCCESS) {
+    if (cudaerr != cudaSuccess) {
         PRINT("WARN", "kernel launch failed with error \"%s\"\n",
                cudaGetErrorString(cudaerr));
         exit(EXIT_FAILURE);
@@ -214,7 +214,7 @@ float dot_product_gpu(float *d_a, float *d_b, int size)
 
     dot_product_gpu_kernel<<<dimOfGrid, dimOfBlock, size_shared_mem>>>(d_a, d_b, size, d_partial_sum);
     cudaError_t cudaerr = cudaDeviceSynchronize();
-    if (cudaerr != CUDA_SUCCESS) {
+    if (cudaerr != cudaSuccess) {
         PRINT("BUG", "kernel launch failed with error \"%s\"\n",
                cudaGetErrorString(cudaerr));
         exit(EXIT_FAILURE);
@@ -347,7 +347,7 @@ void substract_average_gpu_kernel(float *d_data, float *d_average, int size, int
 
 // total_size = unitary_size * count
 __global__
-void transpose_matrix_gpu_kernel(float *d_input, *d_output, int total_size, int unitary_size, int count)
+void transpose_matrix_gpu_kernel(float *d_input, float *d_output, int total_size, int unitary_size, int count)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < total_size)
@@ -373,7 +373,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     START_TIMER(timer);
     substract_average_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(dataset->d_original_images, dataset->d_average, n * w * h, w * h);
     cudaError_t cudaerr = cudaDeviceSynchronize();
-    if (cudaerr != CUDA_SUCCESS) {
+    if (cudaerr != cudaSuccess) {
         PRINT("WARN", "kernel launch failed with error \"%s\"\n",
                cudaGetErrorString(cudaerr));
         exit(EXIT_FAILURE);
@@ -389,9 +389,9 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
 
     START_TIMER(timer);
     for (int i = 0; i < n; i++) {
-        covariance_matrix[i * n + i] = dot_product_gpu(dataset->d_original_images[i * w * h], dataset->d_original_images[i * w * h], w * h) / n;
+        covariance_matrix[i * n + i] = dot_product_gpu(dataset->d_original_images + i * w * h, dataset->d_original_images + i * w * h, w * h) / n;
         for (int j = i + 1; j < n; j++) {
-            covariance_matrix[i * n + j] = dot_product_gpu(dataset->d_original_images[i * w * h], dataset->d_original_images[j * w * h], w * h) / n;
+            covariance_matrix[i * n + j] = dot_product_gpu(dataset->d_original_images + i * w * h, dataset->d_original_images + j * w * h, w * h) / n;
             covariance_matrix[j * n + i] = covariance_matrix[i * n + j];
         }
     }
@@ -410,7 +410,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     START_TIMER(timer);
     jacobi_gpu(covariance_matrix, n, eigenfaces, eigenvalues);
     STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_gpu: Time to do jacobi cpu: %fms\n", timer.time);
+    PRINT("INFO", "compute_eigenfaces_gpu: Time to do jacobi gpu: %fms\n", timer.time);
 
     PRINT("DEBUG", "Computing eigenfaces... done\n");
 
@@ -418,7 +418,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     // Keep only top num_to_keep eigenfaces.
     // Assumes num_to_keep is in the correct range.
     int num_eigenvalues_not_zero = 0;
-    qsort(eigenvalues, n, 2 * sizeof(float), comp_eigenvalues);
+    qsort(eigenvalues, n, 2 * sizeof(float), comp_eigenvalues_gpu);
     for (int i = 0; i < n; i++) {
         //PRINT("DEBUG", "Eigenvalue #%d (index %d): %f\n", i, (int)eigenvalues[2 * i + 1], eigenvalues[2 * i]);
         if (eigenvalues[2 * i] > THRES_EIGEN)
@@ -440,6 +440,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
 
     float *d_A_trans;
     float *d_small_eigenfaces;
+    float *d_big_eigenfaces;
     GPU_CHECKERROR(
     cudaMalloc((void **)&d_A_trans, n * w * h * sizeof(float))
     );
@@ -459,7 +460,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     START_TIMER(timer);
     transpose_matrix_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(dataset->d_original_images, d_A_trans, n * w * h, w * h, n);
     cudaerr = cudaDeviceSynchronize();
-    if (cudaerr != CUDA_SUCCESS) {
+    if (cudaerr != cudaSuccess) {
         PRINT("BUG", "kernel launch failed with error \"%s\"\n",
                cudaGetErrorString(cudaerr));
         exit(EXIT_FAILURE);
@@ -472,7 +473,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     dim3 dimOfBlock_mult(TILE_WIDTH, TILE_WIDTH, 1);
     matrix_mult_gpu_kernel<<<dimOfGrid_mult, dimOfBlock_mult>>>(d_A_trans, d_small_eigenfaces, d_big_eigenfaces, n, w * h, num_to_keep, n);
     cudaerr = cudaDeviceSynchronize();
-    if (cudaerr != CUDA_SUCCESS) {
+    if (cudaerr != cudaSuccess) {
         PRINT("WARN", "kernel matrix_mult_gpu_kernel launch failed with error \"%s\"\n",
                cudaGetErrorString(cudaerr));
         exit(EXIT_FAILURE);
@@ -525,7 +526,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
 
     transpose_matrix_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_big_eigenfaces, dataset->d_eigenfaces, num_to_keep * w * h, num_to_keep, w *h);
     cudaerr = cudaDeviceSynchronize();
-    if (cudaerr != CUDA_SUCCESS) {
+    if (cudaerr != cudaSuccess) {
         PRINT("BUG", "kernel launch failed with error \"%s\"\n",
                cudaGetErrorString(cudaerr));
         exit(EXIT_FAILURE);
@@ -538,7 +539,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     for (int i = 0; i < num_to_keep; i++) {
         normalize_gpu(dataset->d_eigenfaces + i * w * h, w * h);
         cudaError_t cudaerr = cudaDeviceSynchronize();
-        if (cudaerr != CUDA_SUCCESS) {
+        if (cudaerr != cudaSuccess) {
             PRINT("BUG", "kernel launch failed with error \"%s\"\n",
                   cudaGetErrorString(cudaerr));
             exit(EXIT_FAILURE);
@@ -555,7 +556,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     free(eigenfaces);
     free(eigenvalues);
     free(h_small_eigenfaces);
-    free(h_big_eigenfaces);
+    //free(h_big_eigenfaces);
     FREE_TIMER(timer);
 
     return 0;
@@ -576,7 +577,7 @@ void matrix_mult_gpu_kernel(float *M, float *N, float *C, int w_M, int h_M, int 
     int col = bx * blockDim.x + tx;
     float result = 0;
 
-    for (int p = 0; p < w_M/TILE_WIDTH; p++) { 
+    for (int p = 0; p < w_M / TILE_WIDTH; p++) {
         // collaboratively load tiles into __shared__
         if (p * TILE_WIDTH + tx >= w_M || row >= h_M)
             s_M[ty][tx] = 0;
@@ -595,7 +596,7 @@ void matrix_mult_gpu_kernel(float *M, float *N, float *C, int w_M, int h_M, int 
         __syncthreads();
     }
 
-    if (row < h_W && col < w_N)
+    if (row < h_M && col < w_N)
         C[row * w_N + col] = result;
 }
 
@@ -653,7 +654,7 @@ struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, stru
         TEST_MALLOC(current_face->coordinates);
 
         for (int j = 0; j < num_eigens; j++)
-            current_face->coordinates[j] = dot_product_gpu(d_images_to_use + i * w * h, dataset->d_eigenfaces[j * w * h], w * h);
+            current_face->coordinates[j] = dot_product_gpu(d_images_to_use + i * w * h, dataset->d_eigenfaces + j * w * h, w * h);
 
         /*for (int j = 0; j < num_eigens; j++)
             printf("%f ", current_face->coordinates[j]);
@@ -726,7 +727,7 @@ float euclidian_distance_gpu(float *d_a, float *d_b, int size)
 
     euclidian_distance_square_gpu_kernel<<<dimOfGrid, dimOfBlock, size_shared_mem>>>(d_a, d_b, size, d_partial_sum);
     cudaError_t cudaerr = cudaDeviceSynchronize();
-    if (cudaerr != CUDA_SUCCESS) {
+    if (cudaerr != cudaSuccess) {
         PRINT("BUG", "kernel launch failed with error \"%s\"\n",
                cudaGetErrorString(cudaerr));
         exit(EXIT_FAILURE);
@@ -779,13 +780,13 @@ struct FaceCoordinatesGPU * get_closest_match_gpu(struct DatasetGPU *dataset, st
     );
 
     for (int i = 0; i < num_faces; i++) {
-        float distance = euclidian_distance_gpu(d_faces + num_faces * num_eigens, d_faces + i * num_eigens, num_eigens));
+        float distance = euclidian_distance_gpu(d_faces + num_faces * num_eigens, d_faces + i * num_eigens, num_eigens);
         PRINT("DEBUG", "Distance between %s and %s is %f\n", face->name, dataset->faces[i]->name, distance);
         if (distance < min) {
             min = distance;
             closest = dataset->faces[i];
         }
     }
-    free(diff);
+    GPU_CHECKERROR(cudaFree(d_faces));
     return closest;
 }

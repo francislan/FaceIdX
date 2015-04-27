@@ -7,28 +7,7 @@
 #include "database_cpu.h"
 #include "misc.h"
 #include "eigen_cpu.h"
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
-
-// User has to call free_image
-struct ImageCPU * load_image_cpu(const char *filename, int req_comp)
-{
-    struct ImageCPU *image = (struct ImageCPU *)malloc(sizeof(struct ImageCPU));
-    TEST_MALLOC(image);
-    unsigned char *image_data = stbi_load(filename, &(image->w), &(image->h), &(image->comp), req_comp);
-    strcpy(image->filename, filename); // buffer overflow
-    image->req_comp = req_comp;
-    image->data = (float *)malloc(image->w * image->h * sizeof(float));
-    TEST_MALLOC(image->data);
-
-    for (int j = 0; j < image->w * image->h; j++)
-        image->data[j] = image_data[j];
-
-    stbi_image_free(image_data);
-    return image;
-}
+#include "load_save_image.h"
 
 void free_image_cpu(struct ImageCPU *image)
 {
@@ -325,32 +304,6 @@ void free_dataset_cpu(struct DatasetCPU *dataset)
 
     free_image_cpu(dataset->average);
     free(dataset);
-}
-
-void save_image_to_disk_cpu(struct ImageCPU *image, const char *name)
-{
-    int w = image->w;
-    int h = image->h;
-    unsigned char *image_data = (unsigned char *)malloc(w * h * 1 * sizeof(unsigned char));
-    TEST_MALLOC(image_data);
-
-    float min = image->data[0];
-    float max = image->data[0];
-    for (int j = 1; j < w * h; j++) {
-        float current = image->data[j];
-        if (current > max) {
-            max = current;
-        } else if (current < min) {
-            min = current;
-        }
-    }
-    // bad conversion from float to unsigned char
-    for (int j = 0; j < w * h; j++)
-        image_data[j] = image->data[j] > 0 ?
-            (unsigned char)((image->data[j] / max) * 127 + 128) :
-            (unsigned char)(128 - (image->data[j] / min) * 128);
-    stbi_write_png(name, w, h, 1, image_data, 0);
-    free(image_data);
 }
 
 

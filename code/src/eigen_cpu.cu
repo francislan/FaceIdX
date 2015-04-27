@@ -6,6 +6,7 @@
 #include "eigen_cpu.h"
 #include "database_cpu.h"
 #include "misc.h"
+#include "load_save_image.h"
 
 #define THREADS_PER_BLOCK 256
 

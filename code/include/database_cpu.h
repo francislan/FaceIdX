@@ -38,14 +38,12 @@ struct DatasetCPU {
 	struct FaceCoordinatesCPU **faces; //malloc
 };
 
-struct ImageCPU * load_image_cpu(const char *filename, int req_comp);
 void free_image_cpu(struct ImageCPU *image);
 void free_face_cpu(struct FaceCoordinatesCPU *face);
 struct DatasetCPU * create_dataset_cpu(const char *directory, const char *name);
 struct DatasetCPU * load_dataset_cpu(const char *dataset_path);
 int save_dataset_to_disk_cpu(struct DatasetCPU *dataset, const char *path);
 void free_dataset_cpu(struct DatasetCPU *dataset);
-void save_image_to_disk_cpu(struct ImageCPU *image, const char *name);
 void save_reconstructed_face_to_disk_cpu(struct DatasetCPU *dataset, struct FaceCoordinatesCPU *face, int num_eigenfaces);
 int add_faces_and_compute_coordinates_cpu(struct DatasetCPU *dataset, const char *path);
 void identify_face_cpu(struct DatasetCPU *dataset, const char *path);

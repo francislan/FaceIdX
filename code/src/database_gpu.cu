@@ -7,42 +7,22 @@
 #include "database_gpu.h"
 #include "misc.h"
 #include "eigen_gpu.h"
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
+#include "load_save_image.h"
 
-// User has to call free_image
-struct ImageGPU * load_image_gpu(const char *filename, int req_comp)
-{
-    struct ImageGPU *image = (struct ImageGPU *)malloc(sizeof(struct ImageGPU));
-    TEST_MALLOC(image);
-    unsigned char *image_data = stbi_load(filename, &(image->w), &(image->h), &(image->comp), req_comp);
-    strcpy(image->filename, filename); // buffer overflow
-    image->req_comp = req_comp;
-    image->data = (float *)malloc(image->w * image->h * sizeof(float));
-    TEST_MALLOC(image->data);
-
-    for (int j = 0; j < image->w * image->h; j++)
-        image->data[j] = image_data[j];
-
-    stbi_image_free(image_data);
-    return image;
-}
 
 void free_image_gpu(struct ImageGPU *image)
 {
     if (image == NULL)
-	return;
+        return;
     if (image->data != NULL)
-	    free(image->data);
+        free(image->data);
     free(image);
 }
 
 void free_face_gpu(struct FaceCoordinatesGPU *face)
 {
     if (face == NULL)
-	return;
+        return;
     free(face->coordinates);
     free(face);
 }
@@ -56,6 +36,7 @@ struct DatasetGPU * create_dataset_gpu(const char *directory, const char *name)
     int w = 0, h = 0;
     struct DatasetGPU *dataset = NULL;
     char command[200] = ""; // careful buffer overflow
+    struct ImageGPU *temp = NULL;
     Timer timer;
     INITIALIZE_TIMER(timer);
 
@@ -89,14 +70,8 @@ struct DatasetGPU * create_dataset_gpu(const char *directory, const char *name)
     dataset->path = "";
     dataset->num_original_images = num_images;
 
-    GPU_CHECKERROR(
-    cudaMalloc((void **)&(dataset->d_original_images), num_images * w * h * sizeof(float))
-    );
-
-    dataset->original_names = (char *)malloc(num_images * sizeof(char *));
+    dataset->original_names = (char **)malloc(num_images * sizeof(char *));
     TEST_MALLOC(dataset->original_names);
-
-    struct ImageGPU *temp = NULL;
 
     while (getline(&line, &len, fp) != -1) {
         if (line[strlen(line) - 1] == '\n')
@@ -112,6 +87,9 @@ struct DatasetGPU * create_dataset_gpu(const char *directory, const char *name)
         if (i == 0) {
             w = temp->w;
             h = temp->h;
+            GPU_CHECKERROR(
+            cudaMalloc((void **)&(dataset->d_original_images), num_images * w * h * sizeof(float))
+            );
         } else {
             if (w != temp->w || h != temp->h) {
                 PRINT("WARN", "Images in directory have different width and/or height. Aborting\n");
@@ -127,8 +105,10 @@ struct DatasetGPU * create_dataset_gpu(const char *directory, const char *name)
                    cudaMemcpyHostToDevice)
         );
         free_image_gpu(temp);
+        temp = NULL;
         i++;
-        PRINT("DEBUG", "Loading file: %s\n", dataset->original_images[i-1]->filename);
+        PRINT("DEBUG", "Loading file: %s\n", dataset->original_names[i]);
+        PRINT("DEBUG", "Loading file: %s\n", line);
     }
 
     dataset->w = w;
@@ -196,17 +176,17 @@ struct DatasetGPU * load_dataset_gpu(const char *path)
         fread(&c, sizeof(char), 1, f);
         if (c == '\0')
             break;
+        fread(temp, w * h * sizeof(float), 1, f);
+        GPU_CHECKERROR(
+        cudaMemcpy((void*)dataset->d_average,
+                   (void*)temp,
+                   w * h * sizeof(float),
+                   cudaMemcpyHostToDevice)
+        );
     }
-    fread(temp, w * h * sizeof(float), 1, f);
-    GPU_CHECKERROR(
-    cudaMemcpy((void*)(dataset->d_original_images + i * w * h),
-               (void*)temp->data,
-               w * h * sizeof(float),
-               cudaMemcpyHostToDevice)
-    );
 
     GPU_CHECKERROR(
-    cudaMalloc((void **)&(dataset->d_eigenfaces), num_eigenfaces * w * h * sizeof(float))
+    cudaMalloc((void **)&(dataset->d_eigenfaces), dataset->num_eigenfaces * w * h * sizeof(float))
     );
 
     for (int i = 0; i < dataset->num_eigenfaces; i++) {
@@ -218,7 +198,7 @@ struct DatasetGPU * load_dataset_gpu(const char *path)
         fread(temp, w * h * sizeof(float), 1, f);
         GPU_CHECKERROR(
         cudaMemcpy((void*)(dataset->d_eigenfaces + i * w * h),
-                   (void*)temp->data,
+                   (void*)temp,
                    w * h * sizeof(float),
                    cudaMemcpyHostToDevice)
         );
@@ -320,7 +300,7 @@ int save_dataset_to_disk_gpu(struct DatasetGPU *dataset, const char *path)
             fwrite("\0", sizeof(char), 1, f);
             GPU_CHECKERROR(
             cudaMemcpy((void*)temp,
-                       (void*)dataset->d_eigenfaces + i * w * h,
+                       (void*)(dataset->d_eigenfaces + i * w * h),
                        w * h * sizeof(float),
                        cudaMemcpyDeviceToHost)
             );
@@ -349,7 +329,7 @@ int save_dataset_to_disk_gpu(struct DatasetGPU *dataset, const char *path)
 void free_dataset_gpu(struct DatasetGPU *dataset)
 {
     if (dataset == NULL)
-	return;
+    return;
     if (dataset->d_original_images) {
         GPU_CHECKERROR(cudaFree(dataset->d_original_images));
     }
@@ -357,7 +337,7 @@ void free_dataset_gpu(struct DatasetGPU *dataset)
         GPU_CHECKERROR(cudaFree(dataset->d_eigenfaces));
     }
     for (int i = 0; i < dataset->num_faces; i++)
-	free_face_gpu(dataset->faces[i]);
+    free_face_gpu(dataset->faces[i]);
     if (dataset->faces)
         free(dataset->faces);
 
@@ -368,32 +348,6 @@ void free_dataset_gpu(struct DatasetGPU *dataset)
     if (dataset->original_names)
         free(dataset->original_names);
     free(dataset);
-}
-
-void save_image_to_disk_gpu(struct ImageGPU *image, const char *name)
-{
-    int w = image->w;
-    int h = image->h;
-    unsigned char *image_data = (unsigned char *)malloc(w * h * 1 * sizeof(unsigned char));
-    TEST_MALLOC(image_data);
-
-    float min = image->data[0];
-    float max = image->data[0];
-    for (int j = 1; j < w * h; j++) {
-        float current = image->data[j];
-        if (current > max) {
-            max = current;
-        } else if (current < min) {
-            min = current;
-        }
-    }
-    // bad conversion from float to unsigned char
-    for (int j = 0; j < w * h; j++)
-        image_data[j] = image->data[j] > 0 ?
-            (unsigned char)((image->data[j] / max) * 127 + 128) :
-            (unsigned char)(128 - (image->data[j] / min) * 128);
-    stbi_write_png(name, w, h, 1, image_data, 0);
-    free(image_data);
 }
 
 __global__
@@ -407,16 +361,51 @@ void reconstruct_face_gpu_kernel(float *d_output, float *d_average, float *d_coo
     }
 }
 
-void save_reconstructed_face_to_disk(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face, int num_eigenfaces)
+// Not working for blockDim.x not a power of 2
+__global__
+void normalize_image_to_save_gpu_kernel(float *d_image, int size, int stride)
 {
-    struct ImageGPU *image = (struct ImageGPU *)malloc(sizeof(struct ImageGPU));
-    TEST_MALLOC(image);
-    image->w = dataset->w;
-    image->h = dataset->h;
-    image->comp = 1;
-    image->req_comp = 1;
-    image->data = (float *)calloc(image->w * image->h, sizeof(float));
-    TEST_MALLOC(image->data);
+    extern __shared__ float s_min_max[];
+    int i = blockDim.x * blockIdx.x + threadIdx.x;
+    if (i >= size)
+        return;
+
+    int max = d_image[i];
+    int min = d_image[i];
+    i += stride;
+    while (i < size) {
+        float current = d_image[i];
+        if (current > max)
+            max = current;
+        else if (current < min)
+            min = current;
+        i += stride;
+    }
+    s_min_max[i] = min;
+    s_min_max[i + blockDim.x] = max;
+    __syncthreads();
+
+    // Reduction
+    for (int stride2 = blockDim.x / 2; stride2 > 0; stride2 /= 2) {
+        if (i < stride2) {
+            if (s_min_max[i + stride2] < s_min_max[i])
+                s_min_max[i] = s_min_max[i + stride2];
+            if (s_min_max[blockDim.x + i + stride2] > s_min_max[blockDim.x + i])
+                s_min_max[blockDim.x + i] = s_min_max[blockDim.x + i + stride2];
+        }
+        __syncthreads();
+    }
+    min = s_min_max[0];
+    max = s_min_max[blockDim.x];
+    for (i = blockDim.x * blockIdx.x + threadIdx.x; i < size; i += stride)
+        d_image[i] = (d_image[i] - min) / (max - min) * 255;
+}
+
+void save_reconstructed_face_to_disk_gpu(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face, int num_eigenfaces)
+{
+    int w = dataset->w;
+    int h = dataset->h;
+    char name[100];
 
     int n = num_eigenfaces > face->num_eigenfaces ? face->num_eigenfaces : num_eigenfaces;
     float *d_temp;
@@ -438,47 +427,35 @@ void save_reconstructed_face_to_disk(struct DatasetGPU *dataset, struct FaceCoor
     dim3 dimOfGrid(num_blocks, 1, 1);
     dim3 dimOfBlock(1024, 1, 1);
     if (num_blocks == 1)
-        dimOfBlock.x = ceil(size / 32.0) * 32;
+        dimOfBlock.x = ceil(w * h / 32.0) * 32;
 
     reconstruct_face_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_temp, dataset->d_average, d_coordinates, dataset->d_eigenfaces, n, w * h);
     cudaError_t cudaerr = cudaDeviceSynchronize();
-    if (cudaerr != CUDA_SUCCESS) {
+    if (cudaerr != cudaSuccess) {
         PRINT("BUG", "kernel launch failed with error \"%s\"\n",
                cudaGetErrorString(cudaerr));
         exit(EXIT_FAILURE);
     }
 
-    GPU_CHECKERROR(
-    cudaMemcpy((void*)image->data,
-               (void*)d_temp,
-               w * h * sizeof(float),
-               cudaMemcpyDeviceToHost)
-    );
-    cudaDeviceSynchronize();
-
-    //TODO Do that on GPU
-    float min = image->data[0];
-    float max = image->data[0];
-    for (int j = 1; j < image->w * image->h; j++) {
-        float current = image->data[j];
-        if (current > max) {
-            max = current;
-        } else if (current < min) {
-            min = current;
-        }
+    dimOfGrid.x = 1;
+    int size_shared_mem = 2 * dimOfBlock.x * sizeof(float);
+    normalize_image_to_save_gpu_kernel<<<dimOfGrid, dimOfBlock, size_shared_mem>>>(d_temp, w * h, 1024);
+    cudaerr = cudaDeviceSynchronize();
+    if (cudaerr != cudaSuccess) {
+        PRINT("BUG", "kernel launch failed with error \"%s\"\n",
+               cudaGetErrorString(cudaerr));
+        exit(EXIT_FAILURE);
     }
-    PRINT("INFO", "Min: %f, Max: %f\n", min, max);
-    for (int j = 0; j < image->w * image->h; j++)
-        image->data[j] = (image->data[j] - min) / (max - min) * 255;
 
-    sprintf(image->filename, "reconstructed/%s_with_%d.png", face->name, n);
-    save_image_to_disk_gpu(image, image->filename);
-    free_image_gpu(image);
+    sprintf(name, "reconstructed/%s_with_%d.png", face->name, n); //buffer overflow
+    save_image_to_disk_gpu(d_temp, w, h, name);
+    GPU_CHECKERROR(cudaFree(d_temp));
+    GPU_CHECKERROR(cudaFree(d_coordinates));
 }
 
 // Expects dataset != NULL
 // Returns the number of faces added
-int add_faces_and_compute_coordinates(struct DatasetGPU *dataset, const char *path)
+int add_faces_and_compute_coordinates_gpu(struct DatasetGPU *dataset, const char *path)
 {
     char *line = NULL;
     size_t len = 0;
@@ -495,7 +472,7 @@ int add_faces_and_compute_coordinates(struct DatasetGPU *dataset, const char *pa
             PRINT("WARN", "Cannot access file %s!\n", path);
             return 0;
         }
-        struct ImageGPU *image = load_image(path, 1);
+        struct ImageGPU *image = load_image_gpu(path, 1);
         compute_weighs_gpu(dataset, &image, 0, 1, 1);
         dataset->num_new_faces++;
         free_image_gpu(image);
@@ -534,8 +511,8 @@ int add_faces_and_compute_coordinates(struct DatasetGPU *dataset, const char *pa
         strcpy(image_name, path);
         strcat(image_name, "/");
         strcat(image_name, line);
-        images[i] = load_image(image_name, 1);
-	strcpy(images[i]->filename, line); // possible buffer overflow
+        images[i] = load_image_gpu(image_name, 1);
+        strcpy(images[i]->filename, line); // possible buffer overflow
         if (w != images[i]->w || h != images[i]->h) {
                 PRINT("WARN", "ImageGPUs in directory have different width and/or height. Aborting\n");
                 num_images = 0;
