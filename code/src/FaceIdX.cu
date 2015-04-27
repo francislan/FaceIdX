@@ -6,11 +6,11 @@
 #include "misc.h"
 #include "eigen_cpu.h"
 #include "database_cpu.h"
-//#include "eigen_gpu.h"
-//#include "database_gpu.h"
+#include "eigen_gpu.h"
+#include "database_gpu.h"
 
 void display_menu_cpu(struct DatasetCPU *dataset_cpu);
-//void display_menu_gpu(struct DatasetGPU *dataset_gpu);
+void display_menu_gpu(struct DatasetGPU *dataset_gpu);
 int get_user_choice();
 void get_user_string(char **s);
 
@@ -18,21 +18,20 @@ int main(int argc, char **argv)
 {
 
     struct DatasetCPU *dataset_cpu = NULL;
-    //struct DatasetGPU *dataset_gpu = NULL;
+    struct DatasetGPU *dataset_gpu = NULL;
     struct DatasetCPU *dataset_gpu = NULL;
-    int use_gpu = 0;
+    int use_gpu = 1;
     if (argc == 2 && !strcmp(argv[1], "-cpu"))
-	use_gpu = 0;
+        use_gpu = 0;
     int action = 0;
     char name[100] = "";
-    // Do not forget to free them
     char *path = NULL;
     char *dataset_name = NULL;
     int tmp;
     do {
- //       if (use_gpu)
-//            display_menu_gpu(dataset_gpu);
- //       else
+        if (use_gpu)
+            display_menu_gpu(dataset_gpu);
+        else
             display_menu_cpu(dataset_cpu);
         action = get_user_choice();
 
@@ -44,8 +43,8 @@ int main(int argc, char **argv)
             get_user_string(&dataset_name);
             if (use_gpu) {
                 if (dataset_gpu != NULL)
-            //        free_dataset_gpu(dataset_gpu);
-          //      dataset_gpu = create_dataset_and_compute_all_gpu(path, dataset_name);
+                    free_dataset_gpu(dataset_gpu);
+                dataset_gpu = create_dataset_and_compute_all_gpu(path, dataset_name);
                 if (dataset_gpu)
                     printf("Done!");
             } else {
@@ -63,8 +62,8 @@ int main(int argc, char **argv)
             printf("\nLoading database...\n\n");
             if (use_gpu) {
                 if (dataset_gpu != NULL)
-          //          free_dataset_gpu(dataset_gpu);
-           //     dataset_gpu = load_dataset_gpu(path);
+                    free_dataset_gpu(dataset_gpu);
+                dataset_gpu = load_dataset_gpu(path);
                 if (dataset_gpu)
                     printf("Done!");
             } else {
@@ -98,7 +97,7 @@ int main(int argc, char **argv)
                 strcat(path, "/");
                 strcat(path, dataset_gpu->name);
                 strcat(path, ".dat");
-      //          save_dataset_to_disk_gpu(dataset_gpu, path);
+                save_dataset_to_disk_gpu(dataset_gpu, path);
                 printf("Done!");
             } else {
                 path = (char *)realloc(path, (strlen(path) + strlen(dataset_cpu->name) + 6) * sizeof(char));
@@ -127,9 +126,9 @@ int main(int argc, char **argv)
             get_user_string(&path);
             printf("\nAdding face(s)...\n");
 
-         //   if (use_gpu)
-       //         tmp = add_faces_and_compute_coordinates_gpu(dataset_gpu, path);
-        //    else
+            if (use_gpu)
+                tmp = add_faces_and_compute_coordinates_gpu(dataset_gpu, path);
+            else
                 tmp = add_faces_and_compute_coordinates_cpu(dataset_cpu, path);
 
             if (tmp)
@@ -151,9 +150,9 @@ int main(int argc, char **argv)
             printf("Enter path to a face to identify: ");
             get_user_string(&path);
             printf("\nIdentifying face...\n");
-  //          if (use_gpu)
-    //            identify_face_gpu(dataset_gpu, path);
-      //      else
+            if (use_gpu)
+                identify_face_gpu(dataset_gpu, path);
+            else
                 identify_face_cpu(dataset_cpu, path);
             printf("\nIdentifying face... Done!");
             break;
@@ -174,7 +173,7 @@ int main(int argc, char **argv)
             if (use_gpu) {
                 for (int i = 0; i < dataset_gpu->num_eigenfaces; i++) {
                     sprintf(name, "eigen/Eigenface %d.png", i);
-      //              save_image_to_disk_gpu(dataset_gpu->eigenfaces[i], name);
+                    save_image_to_disk_gpu(dataset_gpu->eigenfaces[i], name);
                 }
             } else {
                 for (int i = 0; i < dataset_cpu->num_eigenfaces; i++) {
@@ -198,13 +197,13 @@ int main(int argc, char **argv)
                 }
             }
             printf("Reconstructing images to ./reconstructed ...");
-    //        if (use_gpu) {
-     //           for (int i = 0; i < dataset_gpu->num_faces; i++)
-      //              save_reconstructed_face_to_disk_gpu(dataset_gpu, dataset_gpu->faces[i], dataset_gpu->num_eigenfaces);
-     //       } else {
+            if (use_gpu) {
+                for (int i = 0; i < dataset_gpu->num_faces; i++)
+                    save_reconstructed_face_to_disk_gpu(dataset_gpu, dataset_gpu->faces[i], dataset_gpu->num_eigenfaces);
+            } else {
                 for (int i = 0; i < dataset_cpu->num_faces; i++)
                     save_reconstructed_face_to_disk_cpu(dataset_cpu, dataset_cpu->faces[i], dataset_cpu->num_eigenfaces);
-     //       }
+            }
             printf("Done!");
             break;
 
@@ -217,6 +216,14 @@ int main(int argc, char **argv)
         getchar();
     } while (action != 8);
 
+    if (use_gpu)
+        free_dataset_gpu(dataset_gpu);
+    else
+        free_dataset_cpu(dataset_cpu);
+
+    free(dataset_name);
+    free(path);
+
     return EXIT_SUCCESS;
 }
 
@@ -225,7 +232,7 @@ void display_menu_cpu(struct DatasetCPU *dataset_cpu)
 {
     system("clear");
     printf("////////////////////////////////////////////////////////////////////////////////\n");
-    printf("///                                 FaceIdX                                  ///\n");
+    printf("///                          FaceIdX - CPU version                           ///\n");
     printf("////////////////////////////////////////////////////////////////////////////////\n\n\n");
 
     printf("Current database: ");
@@ -255,12 +262,12 @@ void display_menu_cpu(struct DatasetCPU *dataset_cpu)
 
     printf("\nYour choice: ");
 }
-/*
+
 void display_menu_gpu(struct DatasetGPU *dataset_gpu)
 {
     system("clear");
     printf("////////////////////////////////////////////////////////////////////////////////\n");
-    printf("///                                 FaceIdX                                  ///\n");
+    printf("///                          FaceIdX - GPU version                           ///\n");
     printf("////////////////////////////////////////////////////////////////////////////////\n\n\n");
 
     printf("Current database: ");
@@ -290,7 +297,7 @@ void display_menu_gpu(struct DatasetGPU *dataset_gpu)
 
     printf("\nYour choice: ");
 }
-*/
+
 int get_user_choice()
 {
     size_t len = 0;
