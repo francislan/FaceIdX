@@ -55,7 +55,7 @@ struct DatasetGPU * create_dataset_and_compute_all_gpu(const char *path, const c
 
     printf("Compute images coordinates...\n");
     START_TIMER(timer);
-    compute_weighs_cpu(dataset, dataset->d_original_images, dataset->num_original_images, 1);
+    compute_weighs_cpu(dataset, NULL, 1, dataset->num_original_images, 1);
     STOP_TIMER(timer);
     PRINT("INFO", "Time for computing faces coordinates on GPU: %f\n", timer.time);
     printf("Compute images coordinates... Done!\n");
@@ -756,14 +756,30 @@ struct FaceCoordinatesGPU * get_closest_match_gpu(struct DatasetGPU *dataset, st
 {
     float min = INFINITY;
     struct FaceCoordinatesGPU *closest = NULL;
-    int num_eigens = face->num_eigenfaces;
-    float *diff = (float *)malloc(num_eigens * sizeof(float));
-    TEST_MALLOC(diff);
+    int num_eigens = dataset->num_eigenfaces;
+    int num_faces = dataset->num_faces;
 
-    for (int i = 0; i < dataset->num_faces; i++) {
-        for (int j = 0; j < num_eigens; j++)
-            diff[j] = face->coordinates[j] - dataset->faces[i]->coordinates[j];
-        float distance = sqrt(dot_product_cpu(diff, diff, num_eigens));
+    float *d_faces;
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&d_faces, (num_faces + 1) * num_eigens * sizeof(float))
+    );
+    for (int i = 0; i < num_faces; i++) {
+        GPU_CHECKERROR(
+        cudaMemcpy((void*)(d_faces + i * num_eigens),
+                   (void*)dataset->faces[i]->coordinates,
+                   num_eigens * sizeof(float),
+                   cudaMemcpyDeviceToHost)
+        );
+    }
+    GPU_CHECKERROR(
+    cudaMemcpy((void*)(d_faces + num_faces * num_eigens),
+               (void*)face->coordinates,
+               num_eigens * sizeof(float),
+               cudaMemcpyDeviceToHost)
+    );
+
+    for (int i = 0; i < num_faces; i++) {
+        float distance = euclidian_distance_gpu(d_faces + num_faces * num_eigens, d_faces + i * num_eigens, num_eigens));
         PRINT("DEBUG", "Distance between %s and %s is %f\n", face->name, dataset->faces[i]->name, distance);
         if (distance < min) {
             min = distance;

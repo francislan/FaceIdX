@@ -496,7 +496,7 @@ int add_faces_and_compute_coordinates(struct DatasetGPU *dataset, const char *pa
             return 0;
         }
         struct ImageGPU *image = load_image(path, 1);
-        compute_weighs_gpu(dataset, &image, 1, 1);
+        compute_weighs_gpu(dataset, &image, 0, 1, 1);
         dataset->num_new_faces++;
         free_image_gpu(image);
         return 1;
@@ -544,7 +544,7 @@ int add_faces_and_compute_coordinates(struct DatasetGPU *dataset, const char *pa
         i++;
         PRINT("DEBUG", "Loading file: %s\n", images[i-1]->filename);
     }
-    compute_weighs_gpu(dataset, images, num_images, 1);
+    compute_weighs_gpu(dataset, images, 0, num_images, 1);
     dataset->num_new_faces += num_images;
 
 end:
@@ -567,7 +567,7 @@ void identify_face_gpu(struct DatasetGPU *dataset, const char *path)
         return;
     }
     struct ImageGPU *image = load_image_gpu(path, 1);
-    struct FaceCoordinatesGPU **faces = compute_weighs_gpu(dataset, &image, 1, 0);
+    struct FaceCoordinatesGPU **faces = compute_weighs_gpu(dataset, &image, 0, 1, 0);
     struct FaceCoordinatesGPU *face = faces[0];
     struct FaceCoordinatesGPU *closest = get_closest_match_gpu(dataset, face);
     if (closest == NULL) {

@@ -50,11 +50,7 @@ void save_image_to_disk_gpu(struct ImageGPU *image, const char *name);
 __global__ void reconstruct_face_gpu_kernel(float *d_output, float *d_average, float *d_coordinates, float *d_eigenfaces, int num_eigens, int size);
 // TODO Try and save all faces using streams
 void save_reconstructed_face_to_disk_gpu(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face, int num_eigenfaces);
-
-//TODO
 int add_faces_and_compute_coordinates_gpu(struct DatasetGPU *dataset, const char *path);
-
-//TODO
 void identify_face_gpu(struct DatasetGPU *dataset, const char *path);
 
 #endif
