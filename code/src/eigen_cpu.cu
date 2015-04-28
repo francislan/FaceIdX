@@ -8,7 +8,7 @@
 #include "misc.h"
 #include "load_save_image.h"
 
-#define THREADS_PER_BLOCK 256
+#define THRES_EIGEN 1.0
 
 struct DatasetCPU * create_dataset_and_compute_all_cpu(const char *path, const char *name)
 {
@@ -147,33 +147,23 @@ float dot_product_cpu(float *a, float *b, int size)
 }
 
 // Expect v to be initialized to 0
-void jacobi_cpu(const float *a, const int n, float *v, float *e)
+void jacobi_cpu(float *a, const int n, float *v, float *e)
 {
-    int p, q, flag, t = 0;
+    int p, q, flag;
     float temp;
-    float theta, zero = 1e-5, max, pi = 3.141592654, c, s;
-    float *d = (float *)malloc(n * n * sizeof(float)); // no need to copy a, has to be changed
-    Timer timer;
-    INITIALIZE_TIMER(timer);
-
-    START_TIMER(timer);
-    for (int i = 0; i < n * n; i++)
-        d[i] = a[i];
+    float theta, zero = 1e-6, max, pi = 3.141592654, c, s;
 
     for(int i = 0; i < n; i++)
         v[i * n + i] = 1;
-    STOP_TIMER(timer);
-    PRINT("INFO", "Jacobi: Time to copy and initialize matrix: %fms\n", timer.time);
 
-    START_TIMER(timer);
     while(1) {
         flag = 0;
         p = 0;
         q = 1;
-        max = fabs(d[0 * n + 1]);
+        max = fabs(a[0 * n + 1]);
         for(int i = 0; i < n; i++)
             for(int j = i + 1; j < n; j++) {
-                temp = fabs(d[i * n + j]);
+                temp = fabs(a[i * n + j]);
                 if (temp > zero) {
                     flag = 1;
                     if (temp > max) {
@@ -185,28 +175,27 @@ void jacobi_cpu(const float *a, const int n, float *v, float *e)
             }
         if (!flag)
             break;
-        t++;
-        if(d[p * n + p] == d[q * n + q]) {
-            if(d[p * n + q] > 0)
+        if(a[p * n + p] == a[q * n + q]) {
+            if(a[p * n + q] > 0)
                 theta = pi/4;
             else
                 theta = -pi/4;
         } else {
-            theta = 0.5 * atan(2 * d[p * n + q] / (d[p * n + p] - d[q * n + q]));
+            theta = 0.5 * atan(2 * a[p * n + q] / (a[p * n + p] - a[q * n + q]));
         }
         c = cos(theta);
         s = sin(theta);
 
         for(int i = 0; i < n; i++) {
-            temp = c * d[p * n + i] + s * d[q * n + i];
-            d[q * n + i] = -s * d[p * n + i] + c * d[q * n + i];
-            d[p * n + i] = temp;
+            temp = c * a[p * n + i] + s * a[q * n + i];
+            a[q * n + i] = -s * a[p * n + i] + c * a[q * n + i];
+            a[p * n + i] = temp;
         }
 
         for(int i = 0; i < n; i++) {
-            temp = c * d[i * n  + p] + s * d[i * n + q];
-            d[i * n + q] = -s * d[i * n + p] + c * d[i * n + q];
-            d[i * n + p] = temp;
+            temp = c * a[i * n  + p] + s * a[i * n + q];
+            a[i * n + q] = -s * a[i * n + p] + c * a[i * n + q];
+            a[i * n + p] = temp;
         }
 
         for(int i = 0; i < n; i++) {
@@ -216,25 +205,11 @@ void jacobi_cpu(const float *a, const int n, float *v, float *e)
         }
 
     }
-    STOP_TIMER(timer);
-    PRINT("INFO", "Jacobi: time for main loop: %fms\n", timer.time);
 
-    //printf("Nb of iterations: %d\n", t);
-/*  printf("The eigenvalues are \n");
-    for(int i = 0; i < n; i++)
-        printf("%8.5f ", d[i * n + i]);
-
-    printf("\nThe corresponding eigenvectors are \n");
-    for(int j = 0; j < n; j++) {
-        for(int i = 0; i < n; i++)
-            printf("% 8.5f,",v[i * n + j]);
-        printf("\n");
-    }*/
     for (int i = 0; i < n; i++) {
-        e[2 * i + 0] = d[i * n + i];
+        e[2 * i + 0] = a[i * n + i];
         e[2 * i + 1] = i;
     }
-    free(d);
 }
 
 // Sorts in place the eigenvalues in descending order
@@ -305,15 +280,22 @@ int compute_eigenfaces_cpu(struct DatasetCPU * dataset, int num_to_keep)
     STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_cpu: Time to do jacobi CPU %f\n", timer.time);
     PRINT("DEBUG", "Computing eigenfaces... done\n");
-
+    /*for (int i = 0; i < n; i++) {
+        printf("Eigen %d\n", i);
+        for (int j = 0; j < n; j++)
+            printf("%f ", eigenfaces[j * n + i]);
+        printf("\n");
+    }*/
     // Keep only top num_to_keep eigenfaces.
     // Assumes num_to_keep is in the correct range.
     START_TIMER(timer);
     int num_eigenvalues_not_zero = 0;
     qsort(eigenvalues, n, 2 * sizeof(float), comp_eigenvalues_cpu);
-    for (int i = 0; i < n; i++)
-        if (eigenvalues[2 * i] > 0.5)
+    for (int i = 0; i < n; i++) {
+        //PRINT("DEBUG", "Eigenvalue #%d (index %d): %f\n", i, (int)eigenvalues[2 * i + 1], eigenvalues[2 * i]);
+        if (eigenvalues[2 * i] > THRES_EIGEN)
             num_eigenvalues_not_zero++;
+    }
     num_to_keep = num_eigenvalues_not_zero;
     STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_cpu: Time to sort eigenvalues %f\n", timer.time);
@@ -349,23 +331,12 @@ int compute_eigenfaces_cpu(struct DatasetCPU * dataset, int num_to_keep)
         }
         normalize_cpu(dataset->eigenfaces[i]->data, w * h);
     }
+    /*printf("Eigen %d\n", 0);
+    for (int j = 0; j < w * h; j++)
+        printf("%f ", dataset->eigenfaces[0]->data[j]);
+    printf("\n");*/
     STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_cpu: Time to transform eigenfaces to w * h %f\n", timer.time);
-
-    // Test if eigenfaces are orthogonal
-    for (int i = 0; i < num_to_keep; i++)
-        PRINT("DEBUG", "<0|%d> = %f\n", i, dot_product_cpu(dataset->eigenfaces[0]->data, dataset->eigenfaces[i]->data, w * h));
-
-    // Test if eigenfaces before transform are orthogonal
-    float *original_eigenfaces_5 = (float *)malloc(n * sizeof(float));
-    float *original_eigenfaces_i = (float *)malloc(n * sizeof(float));
-    for (int j = 0; j < n; j++)
-        original_eigenfaces_5[j] = eigenfaces[j * n + 5];
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++)
-            original_eigenfaces_i[j] = eigenfaces[j * n + i];
-        PRINT("DEBUG", "<0|%d> = %f\n", i, dot_product_cpu(original_eigenfaces_5, original_eigenfaces_i, n));
-    }
 
     free(covariance_matrix);
     free(eigenfaces);
@@ -425,6 +396,7 @@ struct FaceCoordinatesCPU ** compute_weighs_cpu(struct DatasetCPU *dataset, stru
     }
     STOP_TIMER(timer);
     PRINT("INFO", "compute_weighs_cpu: Time to add to database: %fms\n", timer.time);
+    FREE_TIMER(timer);
     return new_faces;
 }
 

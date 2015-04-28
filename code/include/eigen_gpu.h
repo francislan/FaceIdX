@@ -6,6 +6,7 @@
 
 struct DatasetGPU * create_dataset_and_compute_all_gpu(const char *path, const char *name);
 
+__global__ void sum_gpu_kernel(float *d_a, int size, float *d_partial_sum);
 void normalize_gpu(float *d_array, int size);
 __global__ void divide_by_float_gpu_kernel(float *d_array, float constant, int size);
 
@@ -18,11 +19,8 @@ float dot_product_gpu(float *d_a, float *d_b, int size);
 
 __global__ void transpose_matrix_gpu_kernel(float *d_input, float *d_output, int total_size, int unitary_size, int count);
 
-//TODO
-void jacobi_gpu(const float *a, const int n, float *v, float *e);
+void jacobi_gpu(float *a, const int n, float *v, float *e);
 
-//TODO: dot product version *should* be working, waiting for matrix
-//multiplication version
 int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep);
 __global__ void matrix_mult_gpu_kernel(float *d_A, float *d_B, float *d_C, int w_A, int h_A, int w_B, int h_B);
 

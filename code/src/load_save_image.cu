@@ -43,6 +43,7 @@ void save_image_to_disk_gpu(float *d_image, int w, int h, const char *name)
                w * h * sizeof(float),
                cudaMemcpyDeviceToHost)
     );
+    cudaDeviceSynchronize();
 
     // useless, already done?
     float min = image_data_float[0];

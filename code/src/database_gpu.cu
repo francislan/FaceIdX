@@ -175,14 +175,14 @@ struct DatasetGPU * load_dataset_gpu(const char *path)
         fread(&c, sizeof(char), 1, f);
         if (c == '\0')
             break;
-        fread(temp, w * h * sizeof(float), 1, f);
-        GPU_CHECKERROR(
-        cudaMemcpy((void*)dataset->d_average,
-                   (void*)temp,
-                   w * h * sizeof(float),
-                   cudaMemcpyHostToDevice)
-        );
     }
+    fread(temp, w * h * sizeof(float), 1, f);
+    GPU_CHECKERROR(
+    cudaMemcpy((void*)dataset->d_average,
+               (void*)temp,
+               w * h * sizeof(float),
+               cudaMemcpyHostToDevice)
+    );
 
     GPU_CHECKERROR(
     cudaMalloc((void **)&(dataset->d_eigenfaces), dataset->num_eigenfaces * w * h * sizeof(float))
@@ -191,7 +191,7 @@ struct DatasetGPU * load_dataset_gpu(const char *path)
     for (int i = 0; i < dataset->num_eigenfaces; i++) {
         for (int k = 0; k < 100; k++) {
             fread(&c, sizeof(char), 1, f);
-            if (&c == '\0')
+            if (c == '\0')
                break;
         }
         fread(temp, w * h * sizeof(float), 1, f);
@@ -328,7 +328,7 @@ int save_dataset_to_disk_gpu(struct DatasetGPU *dataset, const char *path)
 void free_dataset_gpu(struct DatasetGPU *dataset)
 {
     if (dataset == NULL)
-    return;
+        return;
     if (dataset->d_original_images) {
         GPU_CHECKERROR(cudaFree(dataset->d_original_images));
     }
@@ -336,7 +336,7 @@ void free_dataset_gpu(struct DatasetGPU *dataset)
         GPU_CHECKERROR(cudaFree(dataset->d_eigenfaces));
     }
     for (int i = 0; i < dataset->num_faces; i++)
-    free_face_gpu(dataset->faces[i]);
+        free_face_gpu(dataset->faces[i]);
     if (dataset->faces)
         free(dataset->faces);
 
@@ -344,11 +344,8 @@ void free_dataset_gpu(struct DatasetGPU *dataset)
     if (dataset->num_original_images > 0)
         for (int i = 0; i < dataset->num_original_images; i++)
             free(dataset->original_names[i]);
-    if (dataset->original_names) {
-        for (int i = 0; i < dataset->num_original_images; i++)
-            free(dataset->original_names[i]);
+    if (dataset->original_names)
         free(dataset->original_names);
-    }
     free(dataset);
 }
 
@@ -357,9 +354,10 @@ void reconstruct_face_gpu_kernel(float *d_output, float *d_average, float *d_coo
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < size) {
-        d_output[i] = d_average[i];
+        float pixel = d_average[i];
         for (int k = 0; k < num_eigens; k++)
-            d_output[i] += d_coordinates[k] * d_eigenfaces[k * size + i];
+            pixel += d_coordinates[k] * d_eigenfaces[k * size + i];
+        d_output[i] = pixel;
     }
 }
 
@@ -369,13 +367,10 @@ void normalize_image_to_save_gpu_kernel(float *d_image, int size, int stride)
 {
     extern __shared__ float s_min_max[];
     int i = blockDim.x * blockIdx.x + threadIdx.x;
-    printf("i = %d\n", i);
-    if (i >= size)
-        return;
 
-    int max = d_image[i];
-    int min = d_image[i];
-    i += stride;
+    int max = d_image[0];
+    int min = d_image[0];
+
     while (i < size) {
         float current = d_image[i];
         if (current > max)
@@ -388,7 +383,6 @@ void normalize_image_to_save_gpu_kernel(float *d_image, int size, int stride)
     s_min_max[i] = min;
     s_min_max[i + blockDim.x] = max;
     __syncthreads();
-    printf("ok 4\n");
 
     // Reduction
     for (int stride2 = blockDim.x / 2; stride2 > 0; stride2 /= 2) {
@@ -431,8 +425,11 @@ void save_reconstructed_face_to_disk_gpu(struct DatasetGPU *dataset, struct Face
     int num_blocks = ceil(w * h / 1024.0);
     dim3 dimOfGrid(num_blocks, 1, 1);
     dim3 dimOfBlock(1024, 1, 1);
-    if (num_blocks == 1)
-        dimOfBlock.x = ceil(w * h / 32.0) * 32;
+    if (num_blocks == 1) {
+        dimOfBlock.x = 32;
+        while (dimOfBlock.x < w * h)
+            dimOfBlock.x *= 2;
+    }
 
     reconstruct_face_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_temp, dataset->d_average, d_coordinates, dataset->d_eigenfaces, n, w * h);
     cudaError_t cudaerr = cudaDeviceSynchronize();
