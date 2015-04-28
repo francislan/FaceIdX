@@ -338,6 +338,7 @@ int compute_eigenfaces_cpu(struct DatasetCPU * dataset, int num_to_keep)
     STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_cpu: Time to transform eigenfaces to w * h %f\n", timer.time);
 
+    free(images_minus_average);
     free(covariance_matrix);
     free(eigenfaces);
     free(eigenvalues);

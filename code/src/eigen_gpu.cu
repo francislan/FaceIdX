@@ -245,7 +245,12 @@ void dot_product_gpu_kernel(float *d_a, float *d_b, int size, float *d_partial_s
     extern __shared__ float s_thread_sums[];
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int t = threadIdx.x;
-    s_thread_sums[t] = (i < size ? d_a[i] * d_b[i] : 0);
+    float temp = 0;
+    while (i < size) {
+        temp += d_a[i] * d_b[i];
+        i += gridDim.x * blockDim.x;
+    }
+    s_thread_sums[t] = temp;
     __syncthreads();
 
     // Reduction
@@ -269,14 +274,9 @@ void dot_product_gpu_kernel(float *d_a, float *d_b, int size, float *d_partial_s
 
 float dot_product_gpu(float *d_a, float *d_b, int size)
 {
-    int num_blocks = ceil(size / 1024.0);
+    int num_blocks = ceil(size / 256.0 / 4);
     dim3 dimOfGrid(num_blocks, 1, 1);
-    dim3 dimOfBlock(1024, 1, 1);
-    if (num_blocks == 1) {
-        dimOfBlock.x = 32;
-        while (dimOfBlock.x < size)
-            dimOfBlock.x *= 2;
-    }
+    dim3 dimOfBlock(256, 1, 1);
     int size_shared_mem = dimOfBlock.x * sizeof(float);
 
     float *d_partial_sum;
@@ -391,6 +391,43 @@ void substract_average_gpu_kernel(float *d_data, float *d_average, int size, int
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < size)
         d_data[i] -= d_average[i % (size_image)];
+}
+
+void substract_average_gpu(struct ImageGPU **images, float *d_average, int num_images, int size_image)
+{
+    float *d_data;
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&d_data, num_images * size_image * sizeof(float))
+    );
+
+    for (int i = 0; i < num_images; i++) {
+        GPU_CHECKERROR(
+        cudaMemcpy((void*)(d_data + i * size_image),
+                   (void*)(images[i]->data),
+                   size_image * sizeof(float),
+                   cudaMemcpyHostToDevice)
+        );
+    }
+
+    dim3 dimOfGrid(ceil(size_image * num_images / 1024.0), 1, 1);
+    dim3 dimOfBlock(1024, 1, 1);
+    substract_average_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_data, d_average, size_image * num_images, size_image);
+    cudaError_t cudaerr = cudaDeviceSynchronize();
+    if (cudaerr != cudaSuccess) {
+        PRINT("WARN", "kernel launch failed with error \"%s\"\n",
+               cudaGetErrorString(cudaerr));
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < num_images; i++) {
+        GPU_CHECKERROR(
+        cudaMemcpy((void*)(images[i]->data),
+                   (void*)(d_data + i *size_image),
+                   size_image * sizeof(float),
+                   cudaMemcpyDeviceToHost)
+        );
+    }
+    GPU_CHECKERROR(cudaFree(d_data));
 }
 
 // total_size = unitary_size * count
@@ -708,8 +745,8 @@ void matrix_mult_gpu_kernel(float *M, float *N, float *C, int w_M, int h_M, int 
 
 // Assumes images are valid and dataset not NULL
 // Set use_original_images to 1 to compute coordinates of original images
-// (already loaded on GPU), otherwise set it yo 0 and use images
-struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, struct ImageGPU **images,int use_original_images, int k, int add_to_dataset)
+// (already loaded on GPU), otherwise set it to 0 and use images
+struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, struct ImageGPU **images, int use_original_images, int k, int add_to_dataset)
 {
     int w = dataset->w;
     int h = dataset->h;
@@ -876,14 +913,14 @@ struct FaceCoordinatesGPU * get_closest_match_gpu(struct DatasetGPU *dataset, st
         cudaMemcpy((void*)(d_faces + i * num_eigens),
                    (void*)dataset->faces[i]->coordinates,
                    num_eigens * sizeof(float),
-                   cudaMemcpyDeviceToHost)
+                   cudaMemcpyHostToDevice)
         );
     }
     GPU_CHECKERROR(
     cudaMemcpy((void*)(d_faces + num_faces * num_eigens),
                (void*)face->coordinates,
                num_eigens * sizeof(float),
-               cudaMemcpyDeviceToHost)
+               cudaMemcpyHostToDevice)
     );
 
     for (int i = 0; i < num_faces; i++) {

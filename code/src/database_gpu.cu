@@ -468,6 +468,7 @@ int add_faces_and_compute_coordinates_gpu(struct DatasetGPU *dataset, const char
     int i = 0;
     struct ImageGPU **images = NULL;
     char command[200] = ""; // careful buffer overflow
+    FILE *fp = NULL;
 
     if (strstr(path, ".png")) {
         if(access(path, F_OK) == -1 ) {
@@ -475,6 +476,12 @@ int add_faces_and_compute_coordinates_gpu(struct DatasetGPU *dataset, const char
             return 0;
         }
         struct ImageGPU *image = load_image_gpu(path, 1);
+        if (w != image->w || h != image->h) {
+            PRINT("WARN", "Images in directory have different width and/or height. Aborting\n");
+            num_images = 0;
+            goto end;
+        }
+        substract_average_gpu(&image, dataset->d_average, 1, w * h);
         compute_weighs_gpu(dataset, &image, 0, 1, 1);
         dataset->num_new_faces++;
         free_image_gpu(image);
@@ -484,7 +491,7 @@ int add_faces_and_compute_coordinates_gpu(struct DatasetGPU *dataset, const char
     // Case path is a directory
     sprintf(command, "ls %s | grep png", path);
 
-    FILE *fp = popen(command, "r");
+    fp = popen(command, "r");
     if (fp == NULL) {
         PRINT("BUG", "Cannot scan directory!\n");
         exit(EXIT_FAILURE);
@@ -516,13 +523,14 @@ int add_faces_and_compute_coordinates_gpu(struct DatasetGPU *dataset, const char
         images[i] = load_image_gpu(image_name, 1);
         strcpy(images[i]->filename, line); // possible buffer overflow
         if (w != images[i]->w || h != images[i]->h) {
-                PRINT("WARN", "ImageGPUs in directory have different width and/or height. Aborting\n");
-                num_images = 0;
-                goto end;
+            PRINT("WARN", "Images in directory have different width and/or height. Aborting\n");
+            num_images = 0;
+            goto end;
         }
         i++;
         PRINT("DEBUG", "Loading file: %s\n", images[i-1]->filename);
     }
+    substract_average_gpu(images, dataset->d_average, num_images, w * h);
     compute_weighs_gpu(dataset, images, 0, num_images, 1);
     dataset->num_new_faces += num_images;
 
@@ -546,6 +554,8 @@ void identify_face_gpu(struct DatasetGPU *dataset, const char *path)
         return;
     }
     struct ImageGPU *image = load_image_gpu(path, 1);
+    substract_average_gpu(&image, dataset->d_average, 1, image->w * image->h);
+
     struct FaceCoordinatesGPU **faces = compute_weighs_gpu(dataset, &image, 0, 1, 0);
     struct FaceCoordinatesGPU *face = faces[0];
     struct FaceCoordinatesGPU *closest = get_closest_match_gpu(dataset, face);
@@ -574,5 +584,4 @@ void identify_face_gpu(struct DatasetGPU *dataset, const char *path)
     free(answer);
     free_image_gpu(image);
     free(faces);
-
 }

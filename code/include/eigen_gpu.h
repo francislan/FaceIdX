@@ -26,6 +26,8 @@ __global__ void matrix_mult_gpu_kernel(float *d_A, float *d_B, float *d_C, int w
 
 __global__ void substract_average_gpu_kernel(float *d_data, float *d_average, int size, int size_image);
 
+void substract_average_gpu(struct ImageGPU **images, float *d_average, int num_images, int size_image);
+
 struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, struct ImageGPU **images,int use_original_images, int k, int add_to_dataset);
 
 __global__ void euclidian_distance_square_gpu_kernel(float *d_a, float *d_b, int size, float *d_partial_sum);

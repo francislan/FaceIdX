@@ -360,6 +360,7 @@ int add_faces_and_compute_coordinates_cpu(struct DatasetCPU *dataset, const char
     int i = 0;
     struct ImageCPU **images = NULL;
     char command[200] = ""; // careful buffer overflow
+    FILE *fp = NULL;
 
     if (strstr(path, ".png")) {
         if(access(path, F_OK) == -1 ) {
@@ -367,6 +368,13 @@ int add_faces_and_compute_coordinates_cpu(struct DatasetCPU *dataset, const char
             return 0;
         }
         struct ImageCPU *image = load_image_cpu(path, 1);
+        if (w != image->w || h != image->h) {
+            PRINT("WARN", "Images in directory have different width and/or height. Aborting\n");
+            num_images = 0;
+            goto end;
+        }
+        for (int j = 0; j < image->w * image->h; j++)
+            image->data[j] -= dataset->average->data[j];
         compute_weighs_cpu(dataset, &image, 1, 1);
         dataset->num_new_faces++;
         free_image_cpu(image);
@@ -376,7 +384,7 @@ int add_faces_and_compute_coordinates_cpu(struct DatasetCPU *dataset, const char
     // Case path is a directory
     sprintf(command, "ls %s | grep png", path);
 
-    FILE *fp = popen(command, "r");
+    fp = popen(command, "r");
     if (fp == NULL) {
         PRINT("BUG", "Cannot scan directory!\n");
         exit(EXIT_FAILURE);
@@ -408,13 +416,16 @@ int add_faces_and_compute_coordinates_cpu(struct DatasetCPU *dataset, const char
         images[i] = load_image_cpu(image_name, 1);
 	strcpy(images[i]->filename, line); // possible buffer overflow
         if (w != images[i]->w || h != images[i]->h) {
-                PRINT("WARN", "ImageCPUs in directory have different width and/or height. Aborting\n");
-                num_images = 0;
-                goto end;
+            PRINT("WARN", "Images in directory have different width and/or height. Aborting\n");
+            num_images = 0;
+            goto end;
         }
         i++;
         PRINT("DEBUG", "Loading file: %s\n", images[i-1]->filename);
     }
+    for (int k = 0; k < num_images; k++)
+        for (int j = 0; j < w * h; j++)
+            images[k]->data[j] -= dataset->average->data[j];
     compute_weighs_cpu(dataset, images, num_images, 1);
     dataset->num_new_faces += num_images;
 
@@ -438,6 +449,10 @@ void identify_face_cpu(struct DatasetCPU *dataset, const char *path)
         return;
     }
     struct ImageCPU *image = load_image_cpu(path, 1);
+
+    for (int j = 0; j < image->w * image->h; j++)
+        image->data[j] -=  dataset->average->data[j];
+
     struct FaceCoordinatesCPU **faces = compute_weighs_cpu(dataset, &image, 1, 0);
     struct FaceCoordinatesCPU *face = faces[0];
     struct FaceCoordinatesCPU *closest = get_closest_match_cpu(dataset, face);
