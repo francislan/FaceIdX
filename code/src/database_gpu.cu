@@ -81,8 +81,8 @@ struct DatasetGPU * create_dataset_gpu(const char *directory, const char *name)
         strcat(image_name, "/");
         strcat(image_name, line);
         temp = load_image_gpu(image_name, 1);
-        dataset->original_names[i] = strdup(line);
-        TEST_MALLOC(dataset->original_names[i]);
+        char *temp_name = strdup(line);
+        dataset->original_names[i] = temp_name;
 
         if (i == 0) {
             w = temp->w;
@@ -106,9 +106,8 @@ struct DatasetGPU * create_dataset_gpu(const char *directory, const char *name)
         );
         free_image_gpu(temp);
         temp = NULL;
+        //PRINT("DEBUG", "Loading file: %s\n", dataset->original_names[i]);
         i++;
-        PRINT("DEBUG", "Loading file: %s\n", dataset->original_names[i]);
-        PRINT("DEBUG", "Loading file: %s\n", line);
     }
 
     dataset->w = w;
@@ -345,8 +344,11 @@ void free_dataset_gpu(struct DatasetGPU *dataset)
     if (dataset->num_original_images > 0)
         for (int i = 0; i < dataset->num_original_images; i++)
             free(dataset->original_names[i]);
-    if (dataset->original_names)
+    if (dataset->original_names) {
+        for (int i = 0; i < dataset->num_original_images; i++)
+            free(dataset->original_names[i]);
         free(dataset->original_names);
+    }
     free(dataset);
 }
 
@@ -367,6 +369,7 @@ void normalize_image_to_save_gpu_kernel(float *d_image, int size, int stride)
 {
     extern __shared__ float s_min_max[];
     int i = blockDim.x * blockIdx.x + threadIdx.x;
+    printf("i = %d\n", i);
     if (i >= size)
         return;
 
@@ -381,9 +384,11 @@ void normalize_image_to_save_gpu_kernel(float *d_image, int size, int stride)
             min = current;
         i += stride;
     }
+    i = blockDim.x * blockIdx.x + threadIdx.x;
     s_min_max[i] = min;
     s_min_max[i + blockDim.x] = max;
     __syncthreads();
+    printf("ok 4\n");
 
     // Reduction
     for (int stride2 = blockDim.x / 2; stride2 > 0; stride2 /= 2) {

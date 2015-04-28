@@ -306,7 +306,6 @@ int compute_eigenfaces_cpu(struct DatasetCPU * dataset, int num_to_keep)
     PRINT("INFO", "compute_eigenfaces_cpu: Time to do jacobi CPU %f\n", timer.time);
     PRINT("DEBUG", "Computing eigenfaces... done\n");
 
-
     // Keep only top num_to_keep eigenfaces.
     // Assumes num_to_keep is in the correct range.
     START_TIMER(timer);
@@ -352,8 +351,6 @@ int compute_eigenfaces_cpu(struct DatasetCPU * dataset, int num_to_keep)
     }
     STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_cpu: Time to transform eigenfaces to w * h %f\n", timer.time);
-
-    PRINT("DEBUG", "Transforming eigenfaces... done\n");
 
     // Test if eigenfaces are orthogonal
     for (int i = 0; i < num_to_keep; i++)

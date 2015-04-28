@@ -37,6 +37,7 @@ struct DatasetGPU * create_dataset_and_compute_all_gpu(const char *path, const c
     PRINT("INFO", "Time for computing average on GPU: %f\n", timer.time);
     if (average == NULL) {
         PRINT("BUG","\naverage computation failed\n");
+        free_dataset_gpu(dataset);
         return NULL;
     }
     printf("Done!\n");
@@ -69,11 +70,14 @@ struct DatasetGPU * create_dataset_and_compute_all_gpu(const char *path, const c
 
 void normalize_gpu(float *d_array, int size)
 {
+    printf("ok\n");
     float norm = sqrt(dot_product_gpu(d_array, d_array, size));
+    printf("ok\n");
     dim3 dimOfGrid(ceil(size / 1024.0), 1, 1);
     dim3 dimOfBlock(1024, 1, 1);
 
     divide_by_float_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_array, norm, size);
+    printf("ok\n");
     cudaError_t cudaerr = cudaDeviceSynchronize();
     if (cudaerr != cudaSuccess) {
         PRINT("BUG", "kernel launch failed with error \"%s\"\n",
@@ -151,7 +155,6 @@ struct ImageGPU * compute_average_gpu(struct DatasetGPU * dataset)
     return h_average;
 }
 
-
 __global__
 void compute_average_gpu_kernel(float *d_images, int w, int h, int num_image, float *d_average)
 {
@@ -173,30 +176,32 @@ void dot_product_gpu_kernel(float *d_a, float *d_b, int size, float *d_partial_s
 {
     extern __shared__ float s_thread_sums[];
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    s_thread_sums[i] = i < size ? d_a[i] * d_b[i] : 0;
+    int t = threadIdx.x;
+    s_thread_sums[t] = (i < size ? d_a[i] * d_b[i] : 0);
     __syncthreads();
 
     // Reduction
     for (int stride = blockDim.x / 2; stride > 32; stride /= 2) {
-        if (i < stride)
-            s_thread_sums[i] += s_thread_sums[i + stride];
+        if (t < stride)
+            s_thread_sums[t] += s_thread_sums[t + stride];
         __syncthreads();
     }
-    if (i < 32) {
+    if (t < 32) {
         volatile float *cache = s_thread_sums;
-        cache[i] += cache[i + 32];
-        cache[i] += cache[i + 16];
-        cache[i] += cache[i + 8];
-        cache[i] += cache[i + 4];
-        cache[i] += cache[i + 2];
-        cache[i] += cache[i + 1];
+        cache[t] += cache[t + 32];
+        cache[t] += cache[t + 16];
+        cache[t] += cache[t + 8];
+        cache[t] += cache[t + 4];
+        cache[t] += cache[t + 2];
+        cache[t] += cache[t + 1];
     }
-    if (i == 0)
+    if (t == 0)
         d_partial_sum[blockIdx.x] = s_thread_sums[0];
 }
 
 float dot_product_gpu(float *d_a, float *d_b, int size)
 {
+    printf("ok 2\n");
     int num_blocks = ceil(size / 1024.0);
     dim3 dimOfGrid(num_blocks, 1, 1);
     dim3 dimOfBlock(1024, 1, 1);
@@ -205,14 +210,18 @@ float dot_product_gpu(float *d_a, float *d_b, int size)
     int size_shared_mem = dimOfBlock.x * sizeof(float);
 
     float *d_partial_sum;
+    printf("ok 2\n");
     GPU_CHECKERROR(
     cudaMalloc((void **)&d_partial_sum, num_blocks * sizeof(float))
     );
+    printf("ok 2\n");
     float *h_partial_sum = (float *)malloc(num_blocks * sizeof(float));
     TEST_MALLOC(h_partial_sum);
     float result = 0;
+    printf("ok 2\n");
 
     dot_product_gpu_kernel<<<dimOfGrid, dimOfBlock, size_shared_mem>>>(d_a, d_b, size, d_partial_sum);
+    printf("ok 2\n");
     cudaError_t cudaerr = cudaDeviceSynchronize();
     if (cudaerr != cudaSuccess) {
         PRINT("BUG", "kernel launch failed with error \"%s\"\n",
@@ -220,6 +229,7 @@ float dot_product_gpu(float *d_a, float *d_b, int size)
         exit(EXIT_FAILURE);
     }
 
+    printf("ok 2\n");
     GPU_CHECKERROR(
     cudaMemcpy((void*)h_partial_sum,
                (void*)d_partial_sum,
@@ -227,12 +237,16 @@ float dot_product_gpu(float *d_a, float *d_b, int size)
                cudaMemcpyDeviceToHost)
     );
     cudaDeviceSynchronize();
+    printf("ok 2\n");
 
     for (int i = 0; i < num_blocks; i++)
         result += h_partial_sum[i];
 
     GPU_CHECKERROR(cudaFree(d_partial_sum));
+    printf("ok 2\n");
+
     free(h_partial_sum);
+    printf("ok 2\n");
 
     return result;
 }
@@ -413,6 +427,12 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     PRINT("INFO", "compute_eigenfaces_gpu: Time to do jacobi gpu: %fms\n", timer.time);
 
     PRINT("DEBUG", "Computing eigenfaces... done\n");
+    for (int i = 0; i < n; i++) {
+        printf("Eigen %d\n", i);
+        for (int j = 0; j < n; j++)
+            printf("%f ", eigenfaces[j * n + i]);
+        printf("\n");
+    }
 
 
     // Keep only top num_to_keep eigenfaces.
@@ -469,7 +489,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     PRINT("INFO", "compute_eigenfaces_gpu: Time to transpose matrix A: %f\n", timer.time);
 
     START_TIMER(timer);
-    dim3 dimOfGrid_mult(ceil(num_to_keep / TILE_WIDTH), ceil(w * h / TILE_WIDTH), 1);
+    dim3 dimOfGrid_mult(ceil(num_to_keep * 1.0 / TILE_WIDTH), ceil(w * h * 1.0 / TILE_WIDTH), 1);
     dim3 dimOfBlock_mult(TILE_WIDTH, TILE_WIDTH, 1);
     matrix_mult_gpu_kernel<<<dimOfGrid_mult, dimOfBlock_mult>>>(d_A_trans, d_small_eigenfaces, d_big_eigenfaces, n, w * h, num_to_keep, n);
     cudaerr = cudaDeviceSynchronize();
@@ -481,10 +501,22 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_gpu: Time to transform eigenfaces to w * h (before normalization): %f\n", timer.time);
 
-/*
+
     float *h_big_eigenfaces = (float *)malloc(num_to_keep * w * h * sizeof(float));
-    TEST_MALLOC(h_big_eigenfaces);    
-    START_TIMER(timer);
+    TEST_MALLOC(h_big_eigenfaces);
+    GPU_CHECKERROR(
+    cudaMemcpy((void*)h_big_eigenfaces,
+               (void*)d_big_eigenfaces,
+               num_to_keep * w * h * sizeof(float),
+               cudaMemcpyDeviceToHost)
+    );
+    cudaDeviceSynchronize();
+
+    printf("Eigen %d\n", 0);
+    for (int j = 0; j < w * h; j++)
+        printf("%f ", h_big_eigenfaces[j * n + 0]);
+    printf("\n");
+/*    START_TIMER(timer);
     for (int i = 0; i < num_to_keep; i++) {
         int index = (int)eigenvalues[2 * i + 1];
         for (int j = 0; j < w * h; j++) {
@@ -524,7 +556,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     );
 */
 
-    transpose_matrix_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_big_eigenfaces, dataset->d_eigenfaces, num_to_keep * w * h, num_to_keep, w *h);
+    transpose_matrix_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_big_eigenfaces, dataset->d_eigenfaces, num_to_keep * w * h, num_to_keep, w * h);
     cudaerr = cudaDeviceSynchronize();
     if (cudaerr != cudaSuccess) {
         PRINT("BUG", "kernel launch failed with error \"%s\"\n",
@@ -537,8 +569,9 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     // Normalizing eigenfaces on GPU
     START_TIMER(timer);
     for (int i = 0; i < num_to_keep; i++) {
+        printf("ok %d\n", i);
         normalize_gpu(dataset->d_eigenfaces + i * w * h, w * h);
-        cudaError_t cudaerr = cudaDeviceSynchronize();
+        cudaerr = cudaDeviceSynchronize();
         if (cudaerr != cudaSuccess) {
             PRINT("BUG", "kernel launch failed with error \"%s\"\n",
                   cudaGetErrorString(cudaerr));
@@ -587,7 +620,7 @@ void matrix_mult_gpu_kernel(float *M, float *N, float *C, int w_M, int h_M, int 
         if (p * TILE_WIDTH + ty >= h_N || col >= w_N)
             s_N[ty][tx] = 0;
         else
-            s_N[ty][tx] = N[(p * TILE_WIDTH + ty) * w_M + col];
+            s_N[ty][tx] = N[(p * TILE_WIDTH + ty) * w_N + col];
         __syncthreads();
 
         // dot product between row of s_M and col of s_N
