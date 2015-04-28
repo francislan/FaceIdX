@@ -280,12 +280,7 @@ int compute_eigenfaces_cpu(struct DatasetCPU * dataset, int num_to_keep)
     STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_cpu: Time to do jacobi CPU %f\n", timer.time);
     PRINT("DEBUG", "Computing eigenfaces... done\n");
-    /*for (int i = 0; i < n; i++) {
-        printf("Eigen %d\n", i);
-        for (int j = 0; j < n; j++)
-            printf("%f ", eigenfaces[j * n + i]);
-        printf("\n");
-    }*/
+
     // Keep only top num_to_keep eigenfaces.
     // Assumes num_to_keep is in the correct range.
     START_TIMER(timer);

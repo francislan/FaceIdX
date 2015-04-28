@@ -638,59 +638,6 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     PRINT("INFO", "compute_eigenfaces_gpu: Time to normalize eigenfaces on GPU: %f\n", timer.time);
     PRINT("DEBUG", "Transforming eigenfaces... done\n");
 
-    // Test if eigenfaces before transform are orthogonal
-    float *original_eigenfaces_5 = (float *)malloc(n * sizeof(float));
-    float *original_eigenfaces_i = (float *)malloc(n * sizeof(float));
-    float *d_original_eigenfaces_5;
-    float *d_original_eigenfaces_i;
-    GPU_CHECKERROR(
-    cudaMalloc((void **)&d_original_eigenfaces_5, n * sizeof(float))
-    );
-    GPU_CHECKERROR(
-    cudaMalloc((void **)&d_original_eigenfaces_i, n * sizeof(float))
-    );
-
-    for (int j = 0; j < n; j++)
-        original_eigenfaces_5[j] = eigenfaces[j * n + 5];
-
-        GPU_CHECKERROR(
-        cudaMemcpy((void*)d_original_eigenfaces_5,
-                   (void*)original_eigenfaces_5,
-                   n * sizeof(float),
-                   cudaMemcpyHostToDevice)
-        );
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++)
-            original_eigenfaces_i[j] = eigenfaces[j * n + i];
-        GPU_CHECKERROR(
-        cudaMemcpy((void*)d_original_eigenfaces_i,
-                   (void*)original_eigenfaces_i,
-                   n * sizeof(float),
-                   cudaMemcpyHostToDevice)
-        );
-        PRINT("DEBUG","<5|%d> = %f\n", i, dot_product_cpu(original_eigenfaces_5, original_eigenfaces_i,n));
-        PRINT("DEBUG","<5|%d> = %f\n", i, dot_product_gpu(d_original_eigenfaces_5, d_original_eigenfaces_i,n));
-    }
-
-    for (int i = 0; i < num_to_keep; i++) {
-        PRINT("DEBUG","BIG <5|%d> = %f\n", i, dot_product_gpu(dataset->d_eigenfaces, dataset->d_eigenfaces + i * w * h, w * h));
-    }
-
-    /*float *h_big_eigenfaces = (float *)malloc(num_to_keep * w * h * sizeof(float));
-    TEST_MALLOC(h_big_eigenfaces);
-    GPU_CHECKERROR(
-    cudaMemcpy((void*)h_big_eigenfaces,
-               (void*)dataset->d_eigenfaces,
-               num_to_keep * w * h * sizeof(float),
-               cudaMemcpyDeviceToHost)
-    );
-    cudaDeviceSynchronize();
-
-    printf("Eigen %d\n", 0);
-    for (int j = 0; j < w * h; j++)
-        printf("%f ", h_big_eigenfaces[j]);
-    printf("\n");
-*/
     GPU_CHECKERROR(cudaFree(d_A_trans));
     GPU_CHECKERROR(cudaFree(d_small_eigenfaces));
     GPU_CHECKERROR(cudaFree(d_big_eigenfaces));
@@ -698,7 +645,6 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     free(eigenfaces);
     free(eigenvalues);
     free(h_small_eigenfaces);
-    //free(h_big_eigenfaces);
     FREE_TIMER(timer);
 
     return 0;

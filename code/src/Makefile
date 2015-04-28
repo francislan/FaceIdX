@@ -1,6 +1,6 @@
 IDIR = ../include
 CC = /usr/local/cuda/bin/nvcc
-CFLAGS = -I$(IDIR) -arch=sm_30 -fmad=false
+CFLAGS = -I$(IDIR) -arch=sm_30 -O3
 
 ODIR = obj
 
