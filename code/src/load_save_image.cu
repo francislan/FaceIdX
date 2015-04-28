@@ -46,6 +46,7 @@ void save_image_to_disk_gpu(float *d_image, int w, int h, const char *name)
     cudaDeviceSynchronize();
 
     // useless, already done?
+    // Not for eigenfaces
     float min = image_data_float[0];
     float max = image_data_float[0];
     for (int j = 1; j < w * h; j++) {
@@ -58,7 +59,7 @@ void save_image_to_disk_gpu(float *d_image, int w, int h, const char *name)
     }
     // bad conversion from float to unsigned char
     for (int j = 0; j < w * h; j++)
-        image_data[j] = image_data_float > 0 ?
+        image_data[j] = image_data_float[j] > 0 ?
             (unsigned char)((image_data_float[j] / max) * 127 + 128) :
             (unsigned char)(128 - (image_data_float[j] / min) * 128);
     stbi_write_png(name, w, h, 1, image_data, 0);
