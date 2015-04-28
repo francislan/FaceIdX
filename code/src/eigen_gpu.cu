@@ -719,7 +719,7 @@ void matrix_mult_gpu_kernel(float *M, float *N, float *C, int w_M, int h_M, int 
     int col = bx * blockDim.x + tx;
     float result = 0;
 
-    for (int p = 0; p < w_M / TILE_WIDTH; p++) {
+    for (int p = 0; p < (w_M + TILE_WIDTH - 1) / TILE_WIDTH; p++) {
         // collaboratively load tiles into __shared__
         if (p * TILE_WIDTH + tx >= w_M || row >= h_M)
             s_M[ty][tx] = 0;
