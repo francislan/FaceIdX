@@ -10,9 +10,8 @@ __global__ void sum_gpu_kernel(float *d_a, int size, float *d_partial_sum);
 void normalize_gpu(float *d_array, int size);
 __global__ void divide_by_float_gpu_kernel(float *d_array, float constant, int size);
 
-//No need to return average, is returned only to save it on disk
-struct ImageGPU * compute_average_gpu(struct DatasetGPU * dataset);
-__global__ void compute_average_gpu_kernel(float *d_images, int w, int h, int num_image, float *d_average);
+void compute_average_gpu(struct DatasetGPU * dataset);
+__global__ void compute_average_gpu_kernel(float *d_images, int size, int num_image, float *d_average);
 
 __global__ void dot_product_gpu(float *d_a, float *d_b, int size, float *d_result);
 float dot_product_gpu(float *d_a, float *d_b, int size, int allocate, float *d_partial_sum, float *h_partial_sum, int num_blocks, int num_threads);

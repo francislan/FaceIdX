@@ -47,9 +47,7 @@ int save_dataset_to_disk_gpu(struct DatasetGPU *dataset, const char *path);
 void free_dataset_gpu(struct DatasetGPU *dataset);
 __global__ void reconstruct_face_gpu_kernel(float *d_output, float *d_average, float *d_coordinates, float *d_eigenfaces, int num_eigens, int size);
 
-// Not working for blockDim.x not a power of 2
-__global__ void normalize_image_to_save_gpu_kernel(float *d_image, int size, int stride);
-// TODO Try and save all faces using streams
+__global__ void normalize_image_to_save_gpu_kernel(float *d_image, int size);
 void save_reconstructed_face_to_disk_gpu(struct DatasetGPU *dataset, struct FaceCoordinatesGPU *face, int num_eigenfaces);
 int add_faces_and_compute_coordinates_gpu(struct DatasetGPU *dataset, const char *path);
 void identify_face_gpu(struct DatasetGPU *dataset, const char *path);

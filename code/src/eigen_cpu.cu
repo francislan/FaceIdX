@@ -151,7 +151,7 @@ void jacobi_cpu(float *a, const int n, float *v, float *e)
 {
     int p, q, flag;
     float temp;
-    float theta, zero = 1e-6, max, pi = 3.141592654, c, s;
+    float theta, zero = 1e-5, max, pi = 3.141592654, c, s;
 
     for(int i = 0; i < n; i++)
         v[i * n + i] = 1;

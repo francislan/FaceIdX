@@ -46,32 +46,31 @@ int main(int argc, char **argv)
                     free_dataset_gpu(dataset_gpu);
                 dataset_gpu = create_dataset_and_compute_all_gpu(path, dataset_name);
                 if (dataset_gpu)
-                    printf("Done!");
+                    printf("\nDone! Press any key to continue");
             } else {
                 if (dataset_cpu != NULL)
                     free_dataset_cpu(dataset_cpu);
                 dataset_cpu = create_dataset_and_compute_all_cpu(path, dataset_name);
                 if (dataset_cpu)
-                    printf("Done!");
+                    printf("\nDone! Press any key to continue");
             }
             break;
 
         case 2:
             printf("\nEnter path to a .dat file: ");
             get_user_string(&path);
-            printf("\nLoading database...\n\n");
             if (use_gpu) {
                 if (dataset_gpu != NULL)
                     free_dataset_gpu(dataset_gpu);
                 dataset_gpu = load_dataset_gpu(path);
                 if (dataset_gpu)
-                    printf("Done!");
+                    printf("\nDone! Press any key to continue");
             } else {
                 if (dataset_cpu != NULL)
                     free_dataset_cpu(dataset_cpu);
                 dataset_cpu = load_dataset_cpu(path);
                 if (dataset_cpu)
-                    printf("Done!");
+                    printf("\nDone! Press any key to continue");
             }
             break;
 
@@ -90,7 +89,6 @@ int main(int argc, char **argv)
                 printf("Enter path to a repo in which %s.dat will be saved: ", dataset_cpu->name);
             }
             get_user_string(&path);
-            printf("\nSaving database...\n\n");
             if (use_gpu) {
                 path = (char *)realloc(path, (strlen(path) + strlen(dataset_gpu->name) + 6) * sizeof(char));
                 TEST_MALLOC(path);
@@ -98,7 +96,7 @@ int main(int argc, char **argv)
                 strcat(path, dataset_gpu->name);
                 strcat(path, ".dat");
                 save_dataset_to_disk_gpu(dataset_gpu, path);
-                printf("Done!");
+                printf("\nDone! Press any key to continue");
             } else {
                 path = (char *)realloc(path, (strlen(path) + strlen(dataset_cpu->name) + 6) * sizeof(char));
                 TEST_MALLOC(path);
@@ -106,7 +104,7 @@ int main(int argc, char **argv)
                 strcat(path, dataset_cpu->name);
                 strcat(path, ".dat");
                 save_dataset_to_disk_cpu(dataset_cpu, path);
-                printf("Done!");
+                printf("\nDone! Press any key to continue");
             }
             break;
 
@@ -124,7 +122,6 @@ int main(int argc, char **argv)
             }
             printf("Enter path to a repo containing new face(s) or path to a single face: ");
             get_user_string(&path);
-            printf("\nAdding face(s)...\n");
 
             if (use_gpu)
                 tmp = add_faces_and_compute_coordinates_gpu(dataset_gpu, path);
@@ -132,7 +129,7 @@ int main(int argc, char **argv)
                 tmp = add_faces_and_compute_coordinates_cpu(dataset_cpu, path);
 
             if (tmp)
-                printf("Adding face(s)... Done! (%d faces added)", tmp);
+                printf("\nDone! Press any key to continue");
             break;
 
         case 5:
@@ -149,12 +146,11 @@ int main(int argc, char **argv)
             }
             printf("Enter path to a face to identify: ");
             get_user_string(&path);
-            printf("\nIdentifying face...\n");
             if (use_gpu)
                 identify_face_gpu(dataset_gpu, path);
             else
                 identify_face_cpu(dataset_cpu, path);
-            printf("\nIdentifying face... Done!");
+            printf("\nDone! Press any key to continue");
             break;
 
         case 6:
@@ -169,7 +165,6 @@ int main(int argc, char **argv)
                     break;
                 }
             }
-            printf("\nSaving eigenfaces to ./eigen ...");
             if (use_gpu) {
                 for (int i = 0; i < dataset_gpu->num_eigenfaces; i++) {
                     sprintf(name, "eigen/Eigenface %d.png", i);
@@ -181,7 +176,7 @@ int main(int argc, char **argv)
                     save_image_to_disk_cpu(dataset_cpu->eigenfaces[i], name);
                 }
             }
-            printf("Done!");
+            printf("\nDone! Press any key to continue");
             break;
 
         case 7:
@@ -196,7 +191,6 @@ int main(int argc, char **argv)
                     break;
                 }
             }
-            printf("Reconstructing images to ./reconstructed ...");
             if (use_gpu) {
                 for (int i = 0; i < dataset_gpu->num_faces; i++)
                     save_reconstructed_face_to_disk_gpu(dataset_gpu, dataset_gpu->faces[i], dataset_gpu->num_eigenfaces);
@@ -204,7 +198,7 @@ int main(int argc, char **argv)
                 for (int i = 0; i < dataset_cpu->num_faces; i++)
                     save_reconstructed_face_to_disk_cpu(dataset_cpu, dataset_cpu->faces[i], dataset_cpu->num_eigenfaces);
             }
-            printf("Done!");
+            printf("\nDone! Press any key to continue");
             break;
 
         case 8:

@@ -106,7 +106,6 @@ struct DatasetGPU * create_dataset_gpu(const char *directory, const char *name)
         );
         free_image_gpu(temp);
         temp = NULL;
-        //PRINT("DEBUG", "Loading file: %s\n", dataset->original_names[i]);
         i++;
     }
 
@@ -238,6 +237,7 @@ struct DatasetGPU * load_dataset_gpu(const char *path)
     }
     dataset->num_faces = current_size;
     fclose(f);
+    free(temp);
     return dataset;
 }
 
@@ -321,6 +321,7 @@ int save_dataset_to_disk_gpu(struct DatasetGPU *dataset, const char *path)
         }
         dataset->num_new_faces = 0;
         fclose(f);
+        free(temp);
     }
     return 0;
 }
@@ -361,12 +362,12 @@ void reconstruct_face_gpu_kernel(float *d_output, float *d_average, float *d_coo
     }
 }
 
-// Not working for blockDim.x not a power of 2
+// Use one block (so that min and max are shared)
 __global__
-void normalize_image_to_save_gpu_kernel(float *d_image, int size, int stride)
+void normalize_image_to_save_gpu_kernel(float *d_image, int size)
 {
     extern __shared__ float s_min_max[];
-    int i = blockDim.x * blockIdx.x + threadIdx.x;
+    int i = threadIdx.x;
 
     int max = d_image[0];
     int min = d_image[0];
@@ -377,9 +378,9 @@ void normalize_image_to_save_gpu_kernel(float *d_image, int size, int stride)
             max = current;
         else if (current < min)
             min = current;
-        i += stride;
+        i += blockDim.x;
     }
-    i = blockDim.x * blockIdx.x + threadIdx.x;
+    i = threadIdx.x;
     s_min_max[i] = min;
     s_min_max[i + blockDim.x] = max;
     __syncthreads();
@@ -396,7 +397,7 @@ void normalize_image_to_save_gpu_kernel(float *d_image, int size, int stride)
     }
     min = s_min_max[0];
     max = s_min_max[blockDim.x];
-    for (i = blockDim.x * blockIdx.x + threadIdx.x; i < size; i += stride)
+    for (i = threadIdx.x; i < size; i += blockDim.x)
         d_image[i] = (d_image[i] - min) / (max - min) * 255;
 }
 
@@ -430,7 +431,6 @@ void save_reconstructed_face_to_disk_gpu(struct DatasetGPU *dataset, struct Face
         while (dimOfBlock.x < w * h)
             dimOfBlock.x *= 2;
     }
-
     reconstruct_face_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_temp, dataset->d_average, d_coordinates, dataset->d_eigenfaces, n, w * h);
     cudaError_t cudaerr = cudaDeviceSynchronize();
     if (cudaerr != cudaSuccess) {
@@ -441,7 +441,7 @@ void save_reconstructed_face_to_disk_gpu(struct DatasetGPU *dataset, struct Face
 
     dimOfGrid.x = 1;
     int size_shared_mem = 2 * dimOfBlock.x * sizeof(float);
-    normalize_image_to_save_gpu_kernel<<<dimOfGrid, dimOfBlock, size_shared_mem>>>(d_temp, w * h, 1024);
+    normalize_image_to_save_gpu_kernel<<<dimOfGrid, dimOfBlock, size_shared_mem>>>(d_temp, w * h);
     cudaerr = cudaDeviceSynchronize();
     if (cudaerr != cudaSuccess) {
         PRINT("BUG", "kernel launch failed with error \"%s\"\n",
@@ -528,7 +528,6 @@ int add_faces_and_compute_coordinates_gpu(struct DatasetGPU *dataset, const char
             goto end;
         }
         i++;
-        PRINT("DEBUG", "Loading file: %s\n", images[i-1]->filename);
     }
     substract_average_gpu(images, dataset->d_average, num_images, w * h);
     compute_weighs_gpu(dataset, images, 0, num_images, 1);
@@ -549,16 +548,35 @@ end:
 void identify_face_gpu(struct DatasetGPU *dataset, const char *path)
 {
     char *answer;
+    Timer timer;
+    INITIALIZE_TIMER(timer);
+
     if (access(path, F_OK) == -1) {
         PRINT("WARN", "Cannot access file %s!\n", path);
         return;
     }
+    START_TIMER(timer);
     struct ImageGPU *image = load_image_gpu(path, 1);
-    substract_average_gpu(&image, dataset->d_average, 1, image->w * image->h);
+    STOP_TIMER(timer);
+    PRINT("DEBUG", "identify_face_gpu: Time for loading image: %fms\n", timer.time);
 
+    START_TIMER(timer);
+    substract_average_gpu(&image, dataset->d_average, 1, image->w * image->h);
+    STOP_TIMER(timer);
+    PRINT("DEBUG", "identify_face_gpu: Time for substracting average: %fms\n", timer.time);
+
+
+    START_TIMER(timer);
     struct FaceCoordinatesGPU **faces = compute_weighs_gpu(dataset, &image, 0, 1, 0);
+    STOP_TIMER(timer);
+    PRINT("DEBUG", "identify_face_gpu: Time for computing coordinates: %fms\n", timer.time);
+
     struct FaceCoordinatesGPU *face = faces[0];
+    START_TIMER(timer);
     struct FaceCoordinatesGPU *closest = get_closest_match_gpu(dataset, face);
+    STOP_TIMER(timer);
+    PRINT("DEBUG", "identify_face_gpu: Time for getting closest match: %fms\n", timer.time);
+
     if (closest == NULL) {
         printf("No match found!\n\n");
     } else {
