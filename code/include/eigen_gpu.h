@@ -15,7 +15,7 @@ struct ImageGPU * compute_average_gpu(struct DatasetGPU * dataset);
 __global__ void compute_average_gpu_kernel(float *d_images, int w, int h, int num_image, float *d_average);
 
 __global__ void dot_product_gpu(float *d_a, float *d_b, int size, float *d_result);
-float dot_product_gpu(float *d_a, float *d_b, int size);
+float dot_product_gpu(float *d_a, float *d_b, int size, int allocate, float *d_partial_sum, float *h_partial_sum, int num_blocks, int num_threads);
 
 __global__ void transpose_matrix_gpu_kernel(float *d_input, float *d_output, int total_size, int unitary_size, int count);
 

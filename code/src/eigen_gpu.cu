@@ -140,7 +140,7 @@ void normalize_gpu(float *d_array, int size)
                cudaGetErrorString(cudaerr));
         exit(EXIT_FAILURE);
     }
-    float norm = sqrt(dot_product_gpu(d_array, d_array, size));
+    float norm = sqrt(dot_product_gpu(d_array, d_array, size, 1, NULL, NULL, 0, 0));
 
     divide_by_float_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_array, norm, size);
     cudaerr = cudaDeviceSynchronize();
@@ -272,19 +272,32 @@ void dot_product_gpu_kernel(float *d_a, float *d_b, int size, float *d_partial_s
         d_partial_sum[blockIdx.x] = s_thread_sums[0];
 }
 
-float dot_product_gpu(float *d_a, float *d_b, int size)
+// d/h_partial_sum can be provided by caller. In the case of multiple
+// dot_products calls (same vector size), it can be significantly faster.
+// Otherwise set to NULL
+float dot_product_gpu(float *d_a, float *d_b, int size, int allocate, float *d_partial_sum_user, float *h_partial_sum_user, int num_blocks, int num_threads)
 {
-    int num_blocks = ceil(size / 256.0 / 4);
+    if (num_blocks == 0 && allocate)
+        num_blocks = ceil(size / 1024.0 / 4);
+    if (num_threads == 0 && allocate)
+        num_threads = 1024;
     dim3 dimOfGrid(num_blocks, 1, 1);
-    dim3 dimOfBlock(256, 1, 1);
+    dim3 dimOfBlock(num_threads, 1, 1);
     int size_shared_mem = dimOfBlock.x * sizeof(float);
 
     float *d_partial_sum;
-    GPU_CHECKERROR(
-    cudaMalloc((void **)&d_partial_sum, num_blocks * sizeof(float))
-    );
-    float *h_partial_sum = (float *)malloc(num_blocks * sizeof(float));
-    TEST_MALLOC(h_partial_sum);
+    float *h_partial_sum;
+    if (allocate) {
+        GPU_CHECKERROR(
+        cudaMalloc((void **)&d_partial_sum, num_blocks * sizeof(float))
+        );
+        h_partial_sum = (float *)malloc(num_blocks * sizeof(float));
+        TEST_MALLOC(h_partial_sum);
+    } else {
+        d_partial_sum = d_partial_sum_user;
+        h_partial_sum = h_partial_sum_user;
+    }
+
     float result = 0;
 
     dot_product_gpu_kernel<<<dimOfGrid, dimOfBlock, size_shared_mem>>>(d_a, d_b, size, d_partial_sum);
@@ -294,7 +307,6 @@ float dot_product_gpu(float *d_a, float *d_b, int size)
                cudaGetErrorString(cudaerr));
         exit(EXIT_FAILURE);
     }
-
     GPU_CHECKERROR(
     cudaMemcpy((void*)h_partial_sum,
                (void*)d_partial_sum,
@@ -306,8 +318,10 @@ float dot_product_gpu(float *d_a, float *d_b, int size)
     for (int i = 0; i < num_blocks; i++)
         result += h_partial_sum[i];
 
-    GPU_CHECKERROR(cudaFree(d_partial_sum));
-    free(h_partial_sum);
+    if (allocate) {
+        GPU_CHECKERROR(cudaFree(d_partial_sum));
+        free(h_partial_sum);
+    }
 
     return result;
 }
@@ -523,16 +537,6 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
                cudaMemcpyDeviceToHost)
     );
 
-/*
-    START_TIMER(timer);
-    for (int i = 0; i < n; i++) {
-        covariance_matrix[i * n + i] = dot_product_gpu(dataset->d_original_images + i * w * h, dataset->d_original_images + i * w * h, w * h) / n;
-        for (int j = i + 1; j < n; j++) {
-            covariance_matrix[i * n + j] = dot_product_gpu(dataset->d_original_images + i * w * h, dataset->d_original_images + j * w * h, w * h) / n;
-            covariance_matrix[j * n + i] = covariance_matrix[i * n + j];
-        }
-    }
-    STOP_TIMER(timer);*/
     PRINT("DEBUG", "Building covariance matrix... done\n");
 
     // Compute eigenfaces
@@ -718,6 +722,15 @@ struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, stru
     struct FaceCoordinatesGPU **new_faces = (struct FaceCoordinatesGPU **)malloc(k * sizeof(struct FaceCoordinatesGPU *));
     TEST_MALLOC(new_faces);
 
+    int num_blocks = ceil(w * h / 1024.0 / 4);
+    float *d_partial_sum;
+    float *h_partial_sum;
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&d_partial_sum, num_blocks * sizeof(float))
+    );
+    h_partial_sum = (float *)malloc(num_blocks * sizeof(float));
+    TEST_MALLOC(h_partial_sum);
+
     for (int i = 0; i < k; i++) {
         new_faces[i] = (struct FaceCoordinatesGPU *)malloc(sizeof(struct FaceCoordinatesGPU));
         TEST_MALLOC(new_faces[i]);
@@ -731,18 +744,12 @@ struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, stru
         if (c)
             *c = '\0';
 
-        //PRINT("DEBUG", "Name: %s\n", current_face->name);
-
         current_face->num_eigenfaces = num_eigens;
         current_face->coordinates = (float *)malloc(num_eigens * sizeof(float));
         TEST_MALLOC(current_face->coordinates);
 
         for (int j = 0; j < num_eigens; j++)
-            current_face->coordinates[j] = dot_product_gpu(d_images_to_use + i * w * h, dataset->d_eigenfaces + j * w * h, w * h);
-/*
-        for (int j = 0; j < num_eigens; j++)
-            printf("%f ", current_face->coordinates[j]);
-        printf("\n");*/
+            current_face->coordinates[j] = dot_product_gpu(d_images_to_use + i * w * h, dataset->d_eigenfaces + j * w * h, w * h, 0, d_partial_sum, h_partial_sum, num_blocks, 1024);
     }
     STOP_TIMER(timer);
     PRINT("INFO", "compute_weighs_cpu: Time to commpute coordinates (including allocation): %fms\n", timer.time);
@@ -755,6 +762,9 @@ struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, stru
         for (int i = n; i < n + k; i++)
             dataset->faces[i] = new_faces[i - n];
     }
+
+    free(h_partial_sum);
+    GPU_CHECKERROR(cudaFree(d_partial_sum));
     FREE_TIMER(timer);
     if (!use_original_images) {
         GPU_CHECKERROR(cudaFree(d_images_to_use));
