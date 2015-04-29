@@ -471,6 +471,59 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     float *covariance_matrix = (float *)malloc(n * n * sizeof(float));
     TEST_MALLOC(covariance_matrix);
 
+    float *d_A;
+    float *d_tA;
+    float *d_covariance_matrix;
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&d_A, n * w * h * sizeof(float))
+    );
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&d_tA, n * w * h * sizeof(float))
+    );
+    GPU_CHECKERROR(
+    cudaMalloc((void **)&d_covariance_matrix, n * n * sizeof(float))
+    );
+    GPU_CHECKERROR(
+    cudaMemcpy((void*)d_tA,
+               (void*)dataset->d_original_images,
+               n * w * h * sizeof(float),
+               cudaMemcpyDeviceToDevice)
+    );
+    float sqrt_n = sqrt(n);
+    divide_by_float_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_tA, sqrt_n, n * w * h);
+
+    START_TIMER(timer);
+    transpose_matrix_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(dataset->d_original_images, d_A, n * w * h, w * h, n);
+    cudaerr = cudaDeviceSynchronize();
+    if (cudaerr != cudaSuccess) {
+        PRINT("BUG", "kernel launch failed with error \"%s\"\n",
+               cudaGetErrorString(cudaerr));
+        exit(EXIT_FAILURE);
+    }
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_gpu: Time to transpose matrix tA: %f\n", timer.time);
+
+    START_TIMER(timer);
+    dim3 dimOfGrid_mult(ceil(n * 1.0 / TILE_WIDTH), ceil(n * 1.0 / TILE_WIDTH), 1);
+    dim3 dimOfBlock_mult(TILE_WIDTH, TILE_WIDTH, 1);
+    matrix_mult_gpu_kernel<<<dimOfGrid_mult, dimOfBlock_mult>>>(d_tA, d_A, d_covariance_matrix, w * h, n, n, w * h);
+    cudaerr = cudaDeviceSynchronize();
+    if (cudaerr != cudaSuccess) {
+        PRINT("WARN", "kernel matrix_mult_gpu_kernel launch failed with error \"%s\"\n",
+               cudaGetErrorString(cudaerr));
+        exit(EXIT_FAILURE);
+    }
+    STOP_TIMER(timer);
+    PRINT("INFO", "compute_eigenfaces_gpu: Time to compute covariance matrix: %fms\n", timer.time);
+
+    GPU_CHECKERROR(
+    cudaMemcpy((void*)covariance_matrix,
+               (void*)d_covariance_matrix,
+               n * n * sizeof(float),
+               cudaMemcpyDeviceToHost)
+    );
+
+/*
     START_TIMER(timer);
     for (int i = 0; i < n; i++) {
         covariance_matrix[i * n + i] = dot_product_gpu(dataset->d_original_images + i * w * h, dataset->d_original_images + i * w * h, w * h) / n;
@@ -479,8 +532,7 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
             covariance_matrix[j * n + i] = covariance_matrix[i * n + j];
         }
     }
-    STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_gpu: Time to compute covariance matrix: %fms\n", timer.time);
+    STOP_TIMER(timer);*/
     PRINT("DEBUG", "Building covariance matrix... done\n");
 
     // Compute eigenfaces
@@ -497,13 +549,6 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     PRINT("INFO", "compute_eigenfaces_gpu: Time to do jacobi gpu: %fms\n", timer.time);
 
     PRINT("DEBUG", "Computing eigenfaces... done\n");
-    /*for (int i = 0; i < n; i++) {
-        printf("Eigen %d\n", i);
-        for (int j = 0; j < n; j++)
-            printf("%f ", eigenfaces[j * n + i]);
-        printf("\n");
-    }*/
-
 
     // Keep only top num_to_keep eigenfaces.
     // Assumes num_to_keep is in the correct range.
@@ -521,20 +566,15 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
 
     // Convert size n eigenfaces to size w*h
     float *h_small_eigenfaces = (float *)malloc(num_to_keep * n * sizeof(float));
-    float sqrt_n = sqrt(n);
     TEST_MALLOC(h_small_eigenfaces);
     for (int i = 0; i < num_to_keep; i++) {
         int index = (int)eigenvalues[2 * i + 1];
         for (int j = 0; j < n; j++)
-            h_small_eigenfaces[j * num_to_keep + i] = eigenfaces[j * n + index] / sqrt_n;
+            h_small_eigenfaces[j * num_to_keep + i] = eigenfaces[j * n + index];
     }
 
-    float *d_A_trans;
     float *d_small_eigenfaces;
     float *d_big_eigenfaces;
-    GPU_CHECKERROR(
-    cudaMalloc((void **)&d_A_trans, n * w * h * sizeof(float))
-    );
     GPU_CHECKERROR(
     cudaMalloc((void **)&d_small_eigenfaces, num_to_keep * n * sizeof(float))
     );
@@ -548,21 +588,11 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
                cudaMemcpyHostToDevice)
     );
 
-    START_TIMER(timer);
-    transpose_matrix_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(dataset->d_original_images, d_A_trans, n * w * h, w * h, n);
-    cudaerr = cudaDeviceSynchronize();
-    if (cudaerr != cudaSuccess) {
-        PRINT("BUG", "kernel launch failed with error \"%s\"\n",
-               cudaGetErrorString(cudaerr));
-        exit(EXIT_FAILURE);
-    }
-    STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_gpu: Time to transpose matrix A: %f\n", timer.time);
 
     START_TIMER(timer);
-    dim3 dimOfGrid_mult(ceil(num_to_keep * 1.0 / TILE_WIDTH), ceil(w * h * 1.0 / TILE_WIDTH), 1);
-    dim3 dimOfBlock_mult(TILE_WIDTH, TILE_WIDTH, 1);
-    matrix_mult_gpu_kernel<<<dimOfGrid_mult, dimOfBlock_mult>>>(d_A_trans, d_small_eigenfaces, d_big_eigenfaces, n, w * h, num_to_keep, n);
+    dimOfGrid_mult.x = ceil(num_to_keep * 1.0 / TILE_WIDTH);
+    dimOfGrid_mult.y = ceil(w * h * 1.0 / TILE_WIDTH);
+    matrix_mult_gpu_kernel<<<dimOfGrid_mult, dimOfBlock_mult>>>(d_A, d_small_eigenfaces, d_big_eigenfaces, n, w * h, num_to_keep, n);
     cudaerr = cudaDeviceSynchronize();
     if (cudaerr != cudaSuccess) {
         PRINT("WARN", "kernel matrix_mult_gpu_kernel launch failed with error \"%s\"\n",
@@ -572,46 +602,10 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_gpu: Time to transform eigenfaces to w * h (before normalization): %f\n", timer.time);
 
-
-/*    START_TIMER(timer);
-    for (int i = 0; i < num_to_keep; i++) {
-        int index = (int)eigenvalues[2 * i + 1];
-        for (int j = 0; j < w * h; j++) {
-            h_big_eigenfaces[i * w * h + j] = dot_product_gpu(d_A_trans + j * n, d_small_eigenfaces + index * n, n) / sqrt_n;
-        }
-    }
-    STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_gpu: Time to transform eigenfaces to w * h (before normalization): %f\n", timer.time);
-
-
-    // Copying eigenfaces to GPU
     START_TIMER(timer);
     GPU_CHECKERROR(
     cudaMalloc((void **)&(dataset->d_eigenfaces), num_to_keep * w * h * sizeof(float))
     );
-    GPU_CHECKERROR(
-    cudaMemcpy((void*)dataset->d_eigenfaces,
-               (void*)h_big_eigenfaces,
-               num_to_keep * w * h * sizeof(float),
-               cudaMemcpyHostToDevice)
-    );
-    STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_gpu: Time to copy eigenfaces to GPU: %f\n", timer.time);
-
-*/
-
-    START_TIMER(timer);
-    GPU_CHECKERROR(
-    cudaMalloc((void **)&(dataset->d_eigenfaces), num_to_keep * w * h * sizeof(float))
-    );
-/*
-    GPU_CHECKERROR(
-    cudaMemcpy((void*)dataset->d_eigenfaces,
-               (void*)d_big_eigenfaces,
-               num_to_keep * w * h * sizeof(float),
-               cudaMemcpyDeviceToDevice)
-    );
-*/
 
     transpose_matrix_gpu_kernel<<<dimOfGrid, dimOfBlock>>>(d_big_eigenfaces, dataset->d_eigenfaces, num_to_keep * w * h, num_to_keep, w * h);
     cudaerr = cudaDeviceSynchronize();
@@ -638,7 +632,9 @@ int compute_eigenfaces_gpu(struct DatasetGPU * dataset, int num_to_keep)
     PRINT("INFO", "compute_eigenfaces_gpu: Time to normalize eigenfaces on GPU: %f\n", timer.time);
     PRINT("DEBUG", "Transforming eigenfaces... done\n");
 
-    GPU_CHECKERROR(cudaFree(d_A_trans));
+    GPU_CHECKERROR(cudaFree(d_A));
+    GPU_CHECKERROR(cudaFree(d_tA));
+    GPU_CHECKERROR(cudaFree(d_covariance_matrix));
     GPU_CHECKERROR(cudaFree(d_small_eigenfaces));
     GPU_CHECKERROR(cudaFree(d_big_eigenfaces));
     free(covariance_matrix);

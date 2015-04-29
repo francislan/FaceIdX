@@ -326,10 +326,7 @@ int compute_eigenfaces_cpu(struct DatasetCPU * dataset, int num_to_keep)
         }
         normalize_cpu(dataset->eigenfaces[i]->data, w * h);
     }
-    /*printf("Eigen %d\n", 0);
-    for (int j = 0; j < w * h; j++)
-        printf("%f ", dataset->eigenfaces[0]->data[j]);
-    printf("\n");*/
+
     STOP_TIMER(timer);
     PRINT("INFO", "compute_eigenfaces_cpu: Time to transform eigenfaces to w * h %f\n", timer.time);
 
