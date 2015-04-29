@@ -12,65 +12,48 @@
 
 struct DatasetCPU * create_dataset_and_compute_all_cpu(const char *path, const char *name)
 {
-    struct Timer timer_cpu;
-    INITIALIZE_TIMER(timer_cpu);
-    FILE *f = fopen("timer_log.txt", "w");
-    if(f == NULL) {
-        PRINT("BUG", "Error opening timer_log.txt file!\n");
-        exit(EXIT_FAILURE);
-    }
+    struct Timer timer;
+    INITIALIZE_TIMER(timer);
 
-    START_TIMER(timer_cpu);
-    printf("\nCreating database...\n\n");
+    START_TIMER(timer);
+    printf("\nCreating database...\n");
     struct DatasetCPU *dataset = create_dataset_cpu(path, name);
-    STOP_TIMER(timer_cpu);
-    fprintf(f, "Time taken for creating database on cpu: %3.1f ms\n", timer_cpu.time);
+    STOP_TIMER(timer);
+    PRINT("DEBUG", "Time for creating database on CPU: %fms\n", timer.time);
     if (dataset == NULL) {
         PRINT("BUG","DatasetCPU creation failed\n");
         return NULL;
     }
-    printf("\nCreating database... Done!\n\n");
+    printf("Creating database... Done!\n");
 
-    printf("Computing average... ");
-    START_TIMER(timer_cpu);
+    printf("Computing average...\n");
+    START_TIMER(timer);
     struct ImageCPU *average = compute_average_cpu(dataset);
-    STOP_TIMER(timer_cpu);
-    fprintf(f, "Time taken for computing average face on cpu: %3.1f ms\n", timer_cpu.time);
+    STOP_TIMER(timer);
+    PRINT("DEBUG", "Time for computing average on CPU: %fms\n", timer.time);
     if (average == NULL) {
         PRINT("BUG","\naverage computation failed\n");
         return NULL;
     }
-    printf("Done!\n");
+    printf("Computing average... Done!\n");
 
-    START_TIMER(timer_cpu);
     save_image_to_disk_cpu(average, "average_cpu.png");
-    STOP_TIMER(timer_cpu);
-    fprintf(f, "Time taken for saving average on disk on cpu: %3.1f ms\n", timer_cpu.time);
 
-    // Eigenfaces
     printf("Computing eigenfaces...\n");
-    START_TIMER(timer_cpu);
+    START_TIMER(timer);
     compute_eigenfaces_cpu(dataset, dataset->num_original_images);
-    //compute_eigenfaces_cpu(dataset, 50);
-    STOP_TIMER(timer_cpu);
-    fprintf(f, "Time taken for computing eigenfaces on cpu: %3.1f ms\n", timer_cpu.time);
+    STOP_TIMER(timer);
+    PRINT("DEBUG", "Time for computing eigenfaces on CPU: %fms\n", timer.time);
     printf("Computing eigenfaces... Done!\n");
 
     printf("Compute images coordinates...\n");
-    START_TIMER(timer_cpu);
+    START_TIMER(timer);
     compute_weighs_cpu(dataset, dataset->original_images, dataset->num_original_images, 1);
-    STOP_TIMER(timer_cpu);
-    fprintf(f, "Time taken for computing weighs on cpu: %3.1f ms\n", timer_cpu.time);
+    STOP_TIMER(timer);
+    PRINT("DEBUG", "Time for computing faces coordinates on CPU: %fms\n", timer.time);
     printf("Compute images coordinates... Done!\n");
-    /*for (int i = 0; i < dataset->num_faces; i++)
-        PRINT("INFO", "The Closest match of %s is %s.\n", dataset->faces[i]->name, get_closest_match_cpu(dataset, dataset->faces[i])->name);
-*/
-  //  save_dataset_to_disk(dataset, "dataset1.dat");
 
-
-    fclose(f);
-    FREE_TIMER(timer_cpu);
-
+    FREE_TIMER(timer);
     return dataset;
 }
 
@@ -115,22 +98,18 @@ struct ImageCPU * compute_average_cpu(struct DatasetCPU * dataset)
     average->data = (float *)malloc(w * h * sizeof(float));
     TEST_MALLOC(average->data);
     STOP_TIMER(timer);
-    PRINT("INFO", "Time allocating average ImageCPU: %f\n", timer.time);
+    PRINT("DEBUG", "Time allocating average Image on CPU: %fms\n", timer.time);
 
     START_TIMER(timer);
-    for (int x = 0; x < w; x++) {
-        for (int y = 0; y < h; y++) {
-            float sum = 0;
-            for (int i = 0; i < n; i++)
-                sum += GET_PIXEL(dataset->original_images[i], x, y, 0);
-            average->data[y * w + x + 0] = (sum / n);
-        }
+    for (int j = 0; j < w * h; j++) {
+        float sum = 0;
+        for (int i = 0; i < n; i++)
+            sum += dataset->original_images[i]->data[j];
+        average->data[j] = (sum / n);
     }
     STOP_TIMER(timer);
-    PRINT("INFO", "Time computing: %f\n", timer.time);
+    PRINT("DEBUG", "Time computing average: %fms\n", timer.time);
 
-    // Normalize?
-    //normalize_cpu(average->data, w * h);
     dataset->average = average;
     return average;
 }
@@ -146,23 +125,29 @@ float dot_product_cpu(float *a, float *b, int size)
     return sum;
 }
 
-// Expect v to be initialized to 0
 void jacobi_cpu(float *a, const int n, float *v, float *e)
 {
-    int p, q, flag;
+    int p;
+    int q;
+    int flag; // stops when flag == 0
     float temp;
-    float theta, zero = 1e-5, max, pi = 3.141592654, c, s;
+    float theta;
+    float zero = 1e-5;
+    float max;
+    float pi = 3.141592654;
+    float c; // = cos(theta)
+    float s; // = sin(theta)
 
-    for(int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++)
         v[i * n + i] = 1;
 
-    while(1) {
+    while (1) {
         flag = 0;
         p = 0;
         q = 1;
         max = fabs(a[0 * n + 1]);
-        for(int i = 0; i < n; i++)
-            for(int j = i + 1; j < n; j++) {
+        for (int i = 0; i < n; i++)
+            for (int j = i + 1; j < n; j++) {
                 temp = fabs(a[i * n + j]);
                 if (temp > zero) {
                     flag = 1;
@@ -175,8 +160,8 @@ void jacobi_cpu(float *a, const int n, float *v, float *e)
             }
         if (!flag)
             break;
-        if(a[p * n + p] == a[q * n + q]) {
-            if(a[p * n + q] > 0)
+        if (a[p * n + p] == a[q * n + q]) {
+            if (a[p * n + q] > 0)
                 theta = pi/4;
             else
                 theta = -pi/4;
@@ -191,21 +176,17 @@ void jacobi_cpu(float *a, const int n, float *v, float *e)
             a[q * n + i] = -s * a[p * n + i] + c * a[q * n + i];
             a[p * n + i] = temp;
         }
-
         for(int i = 0; i < n; i++) {
             temp = c * a[i * n  + p] + s * a[i * n + q];
             a[i * n + q] = -s * a[i * n + p] + c * a[i * n + q];
             a[i * n + p] = temp;
         }
-
         for(int i = 0; i < n; i++) {
             temp = c * v[i * n + p] + s * v[i * n + q];
             v[i * n + q] = -s * v[i * n + p] + c * v[i * n + q];
             v[i * n + p] = temp;
         }
-
     }
-
     for (int i = 0; i < n; i++) {
         e[2 * i + 0] = a[i * n + i];
         e[2 * i + 1] = i;
@@ -226,11 +207,8 @@ int compute_eigenfaces_cpu(struct DatasetCPU * dataset, int num_to_keep)
     Timer timer;
     INITIALIZE_TIMER(timer);
 
-    START_TIMER(timer);
     float **images_minus_average = (float **)malloc(n * sizeof(float *));
     TEST_MALLOC(images_minus_average);
-    STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_cpu: Time to allocate images_minus_average: %f\n", timer.time);
 
     START_TIMER(timer);
     for (int i = 0; i < n; i++)
@@ -242,15 +220,15 @@ int compute_eigenfaces_cpu(struct DatasetCPU * dataset, int num_to_keep)
         for (int j = 0; j < w * h; j++)
             images_minus_average[i][j] = images_minus_average[i][j] - average->data[j];
     STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_cpu: Time to substract average %f\n", timer.time);
-    PRINT("DEBUG", "Substracting average to images... done\n");
+    PRINT("DEBUG", "compute_eigenfaces_cpu: Time to substract average %fms\n", timer.time);
+    PRINT("INFO", "Substracting average to images... done\n");
 
     // Construct the Covariance Matrix
     START_TIMER(timer);
     float *covariance_matrix = (float *)malloc(n * n * sizeof(float));
     TEST_MALLOC(covariance_matrix);
     STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_cpu: Time to allocate covariance matrix %f\n", timer.time);
+    PRINT("DEBUG", "compute_eigenfaces_cpu: Time to allocate covariance matrix %fms\n", timer.time);
 
     START_TIMER(timer);
     for (int i = 0; i < n; i++) {
@@ -261,29 +239,25 @@ int compute_eigenfaces_cpu(struct DatasetCPU * dataset, int num_to_keep)
         }
     }
     STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_cpu: Time to compute covariance matrix %f\n", timer.time);
-    PRINT("DEBUG", "Building covariance matrix... done\n");
+    PRINT("DEBUG", "compute_eigenfaces_cpu: Time to compute covariance matrix %fms\n", timer.time);
+    PRINT("INFO", "Building covariance matrix... done\n");
 
     // Compute eigenfaces
-    START_TIMER(timer);
     float *eigenfaces = (float *)calloc(n * n, sizeof(float));
     TEST_MALLOC(eigenfaces);
     // eigenvalues stores couple (ev, index), makes it easier to get the top K
     // later
     float *eigenvalues = (float *)malloc(2 * n * sizeof(float));
     TEST_MALLOC(eigenvalues);
-    STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_cpu: Time to allocate arrays for jacobi %f\n", timer.time);
 
     START_TIMER(timer);
     jacobi_cpu(covariance_matrix, n, eigenfaces, eigenvalues);
     STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_cpu: Time to do jacobi CPU %f\n", timer.time);
-    PRINT("DEBUG", "Computing eigenfaces... done\n");
+    PRINT("DEBUG", "compute_eigenfaces_cpu: Time to do jacobi CPU %fms\n", timer.time);
+    PRINT("INFO", "Computing eigenfaces... done\n");
 
     // Keep only top num_to_keep eigenfaces.
     // Assumes num_to_keep is in the correct range.
-    START_TIMER(timer);
     int num_eigenvalues_not_zero = 0;
     qsort(eigenvalues, n, 2 * sizeof(float), comp_eigenvalues_cpu);
     for (int i = 0; i < n; i++) {
@@ -292,8 +266,6 @@ int compute_eigenfaces_cpu(struct DatasetCPU * dataset, int num_to_keep)
             num_eigenvalues_not_zero++;
     }
     num_to_keep = num_eigenvalues_not_zero;
-    STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_cpu: Time to sort eigenvalues %f\n", timer.time);
 
     // Convert size n eigenfaces to size w*h
     START_TIMER(timer);
@@ -312,7 +284,7 @@ int compute_eigenfaces_cpu(struct DatasetCPU * dataset, int num_to_keep)
         sprintf(dataset->eigenfaces[i]->filename, "Eigen_%d", i);
     }
     STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_cpu: Time to allocate eigenfaces %f\n", timer.time);
+    PRINT("DEBUG", "compute_eigenfaces_cpu: Time to allocate eigenfaces %fms\n", timer.time);
 
     START_TIMER(timer);
     float sqrt_n = sqrt(n);
@@ -328,8 +300,9 @@ int compute_eigenfaces_cpu(struct DatasetCPU * dataset, int num_to_keep)
     }
 
     STOP_TIMER(timer);
-    PRINT("INFO", "compute_eigenfaces_cpu: Time to transform eigenfaces to w * h %f\n", timer.time);
+    PRINT("DEBUG", "compute_eigenfaces_cpu: Time to transform eigenfaces to w * h and normalized %fms\n", timer.time);
 
+    FREE_TIMER(timer);
     free(images_minus_average);
     free(covariance_matrix);
     free(eigenfaces);
@@ -344,10 +317,7 @@ struct FaceCoordinatesCPU ** compute_weighs_cpu(struct DatasetCPU *dataset, stru
     int h = dataset->h;
     int num_eigens = dataset->num_eigenfaces;
     int n = dataset->num_faces;
-    Timer timer;
-    INITIALIZE_TIMER(timer);
 
-    START_TIMER(timer);
     struct FaceCoordinatesCPU **new_faces = (struct FaceCoordinatesCPU **)malloc(k * sizeof(struct FaceCoordinatesCPU *));
     TEST_MALLOC(new_faces);
 
@@ -361,8 +331,6 @@ struct FaceCoordinatesCPU ** compute_weighs_cpu(struct DatasetCPU *dataset, stru
         if (c)
             *c = '\0';
 
-        //PRINT("DEBUG", "Name: %s\n", current_face->name);
-
         current_face->num_eigenfaces = num_eigens;
         current_face->coordinates = (float *)malloc(num_eigens * sizeof(float));
         TEST_MALLOC(current_face->coordinates);
@@ -370,15 +338,8 @@ struct FaceCoordinatesCPU ** compute_weighs_cpu(struct DatasetCPU *dataset, stru
         for (int j = 0; j < num_eigens; j++)
             current_face->coordinates[j] = dot_product_cpu(current_image->data,
                                                 dataset->eigenfaces[j]->data, w * h);
-
-        /*for (int j = 0; j < num_eigens; j++)
-            printf("%f ", current_face->coordinates[j]);
-        printf("\n");*/
     }
-    STOP_TIMER(timer);
-    PRINT("INFO", "compute_weighs_cpu: Time to commpute coordinates (including allocation): %fms\n", timer.time);
 
-    START_TIMER(timer);
     if (add_to_dataset) {
         dataset->faces = (struct FaceCoordinatesCPU **)realloc(dataset->faces, (n + k) * sizeof(struct FaceCoordinatesCPU *));
         TEST_MALLOC(dataset->faces);
@@ -387,9 +348,6 @@ struct FaceCoordinatesCPU ** compute_weighs_cpu(struct DatasetCPU *dataset, stru
         for (int i = n; i < n + k; i++)
             dataset->faces[i] = new_faces[i - n];
     }
-    STOP_TIMER(timer);
-    PRINT("INFO", "compute_weighs_cpu: Time to add to database: %fms\n", timer.time);
-    FREE_TIMER(timer);
     return new_faces;
 }
 

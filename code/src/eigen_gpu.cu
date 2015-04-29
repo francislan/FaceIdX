@@ -5,12 +5,10 @@
 #include <math.h>
 
 #include "eigen_gpu.h"
-#include "eigen_cpu.h"
 #include "database_gpu.h"
 #include "misc.h"
 #include "load_save_image.h"
 
-#define THREADS_PER_BLOCK 256
 #define TILE_WIDTH 32
 #define THRES_EIGEN 1.0
 
@@ -188,7 +186,7 @@ void compute_average_gpu(struct DatasetGPU * dataset)
         exit(EXIT_FAILURE);
     }
     STOP_TIMER(timer);
-    PRINT("DEBUG", "Time average kernel: %f\n", timer.time);
+    PRINT("DEBUG", "Time average kernel: %fms\n", timer.time);
 
     FREE_TIMER(timer);
 }

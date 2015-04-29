@@ -89,7 +89,6 @@ struct DatasetCPU * create_dataset_cpu(const char *directory, const char *name)
             }
         }
         i++;
-        PRINT("DEBUG", "Loading file: %s\n", dataset->original_images[i-1]->filename);
     }
 
     dataset->w = w;
@@ -338,7 +337,6 @@ void save_reconstructed_face_to_disk_cpu(struct DatasetCPU *dataset, struct Face
             min = current;
         }
     }
-    PRINT("INFO", "Min: %f, Max: %f\n", min, max);
     for (int j = 0; j < image->w * image->h; j++)
         image->data[j] = (image->data[j] - min) / (max - min) * 255;
 
@@ -444,18 +442,35 @@ end:
 void identify_face_cpu(struct DatasetCPU *dataset, const char *path)
 {
     char *answer;
+    Timer timer;
+    INITIALIZE_TIMER(timer);
+
     if (access(path, F_OK) == -1) {
         PRINT("WARN", "Cannot access file %s!\n", path);
         return;
     }
+    START_TIMER(timer);
     struct ImageCPU *image = load_image_cpu(path, 1);
+    STOP_TIMER(timer);
+    PRINT("DEBUG", "identify_face_cpu: Time for loading image: %fms\n", timer.time);
 
+    START_TIMER(timer);
     for (int j = 0; j < image->w * image->h; j++)
         image->data[j] -=  dataset->average->data[j];
+    STOP_TIMER(timer);
+    PRINT("DEBUG", "identify_face_cpu: Time for substracting average: %fms\n", timer.time);
 
+    START_TIMER(timer);
     struct FaceCoordinatesCPU **faces = compute_weighs_cpu(dataset, &image, 1, 0);
+    STOP_TIMER(timer);
+    PRINT("DEBUG", "identify_face_cpu: Time for computing coordinates: %fms\n", timer.time);
+
     struct FaceCoordinatesCPU *face = faces[0];
+    START_TIMER(timer);
     struct FaceCoordinatesCPU *closest = get_closest_match_cpu(dataset, face);
+    STOP_TIMER(timer);
+    PRINT("DEBUG", "identify_face_cpu: Time for getting closest match: %fms\n", timer.time);
+
     if (closest == NULL) {
         printf("No match found!\n\n");
     } else {
@@ -481,5 +496,5 @@ void identify_face_cpu(struct DatasetCPU *dataset, const char *path)
     free(answer);
     free_image_cpu(image);
     free(faces);
-
+    FREE_TIMER(timer);
 }

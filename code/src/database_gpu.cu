@@ -602,4 +602,5 @@ void identify_face_gpu(struct DatasetGPU *dataset, const char *path)
     free(answer);
     free_image_gpu(image);
     free(faces);
+    FREE_TIMER(timer);
 }

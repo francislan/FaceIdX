@@ -57,15 +57,9 @@ void save_image_to_disk_gpu(float *d_image, int w, int h, const char *name)
             min = current;
         }
     }
-    // bad conversion from float to unsigned char
     for (int j = 0; j < w * h; j++)
         image_data[j] = (unsigned char)((image_data_float[j] - min) / (max - min) * 255);
-/*
-    for (int j = 0; j < w * h; j++)
-        image_data[j] = image_data_float[j] > 0 ?
-            (unsigned char)((image_data_float[j] / max) * 127 + 128) :
-            (unsigned char)(128 - (image_data_float[j] / min) * 128);
-*/
+
     stbi_write_png(name, w, h, 1, image_data, 0);
     free(image_data_float);
     free(image_data);
@@ -106,15 +100,9 @@ void save_image_to_disk_cpu(struct ImageCPU *image, const char *name)
             min = current;
         }
     }
-    // bad conversion from float to unsigned char
     for (int j = 0; j < image->w * image->h; j++)
         image_data[j] = (unsigned char)((image->data[j] - min) / (max - min) * 255);
-/*
-    for (int j = 0; j < w * h; j++)
-        image_data[j] = image->data[j] > 0 ?
-            (unsigned char)((image->data[j] / max) * 127 + 128) :
-            (unsigned char)(128 - (image->data[j] / min) * 128);
-*/
+
     stbi_write_png(name, w, h, 1, image_data, 0);
     free(image_data);
 }

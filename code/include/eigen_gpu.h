@@ -1,9 +1,6 @@
 #ifndef EIGEN_GPU_H
 #define EIGEN_GPU_H
 
-//TODO: calling cudaDeviceSynchronize after each kernel may cause some slow
-//down. Can be removed later
-
 struct DatasetGPU * create_dataset_and_compute_all_gpu(const char *path, const char *name);
 
 __global__ void sum_gpu_kernel(float *d_a, int size, float *d_partial_sum);

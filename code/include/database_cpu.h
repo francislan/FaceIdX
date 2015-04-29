@@ -1,41 +1,37 @@
 #ifndef DATABASE_CPU_H
 #define DATABASE_CPU_H
 
-// Assumes the image is loaded and x and y are correct coordinates
-#define GET_PIXEL(image, x, y, req_comp) \
-	(image)->data[((y) * (image)->w + (x)) * (image)->comp + (req_comp)]
-
 struct ImageCPU {
-	float *data; //malloc
-	int w;
-	int h;
-	int comp;
-	int req_comp;
-	char filename[100];
+    float *data; //malloc
+    int w;
+    int h;
+    int comp;
+    int req_comp;
+    char filename[100];
 };
 
 struct FaceCoordinatesCPU {
-	char name[100];
-	int num_eigenfaces;
-	float *coordinates; //malloc
+    char name[100];
+    int num_eigenfaces;
+    float *coordinates; //malloc
 };
 
 struct DatasetCPU {
-	char name[100];
-	const char *path;
-	int num_eigenfaces;
-	int num_original_images;
-	int num_faces;
-	// new faces added to the loaded dataset
-	// when saving a dataset to disk, if the file already exists, only add
-	// the last num_new_faces at the end of the file.
-	int num_new_faces;
-	int w;
-	int h;
-	struct ImageCPU **original_images; //malloc
-	struct ImageCPU *average; //malloc
-	struct ImageCPU **eigenfaces; //malloc
-	struct FaceCoordinatesCPU **faces; //malloc
+    char name[100];
+    const char *path;
+    int num_eigenfaces;
+    int num_original_images;
+    int num_faces;
+    // new faces added to the loaded dataset
+    // when saving a dataset to disk, if the file already exists, only add
+    // the last num_new_faces at the end of the file.
+    int num_new_faces;
+    int w;
+    int h;
+    struct ImageCPU **original_images; //malloc
+    struct ImageCPU *average; //malloc
+    struct ImageCPU **eigenfaces; //malloc
+    struct FaceCoordinatesCPU **faces; //malloc
 };
 
 void free_image_cpu(struct ImageCPU *image);
