@@ -3,17 +3,17 @@ GPU aXelerated Face Identification
 
 To make:
 Go to /code/src directory,
-    mkdir obj
-    make
+> mkdir obj
+> make
 
 To save eigenfaces and reconstructed faces to disk, you have to create the
 'eigen' and 'reconstructed' directories beforehand (in /code/src)
 
 To run the GPU version:
-    ./FaceIdX
+> ./FaceIdX
 
 To run the CPU version:
-    ./FaceIdX -cpu
+> ./FaceIdX -cpu
 
 Using 2 single-file public domain librairies for image reading/writing:
 https://github.com/nothings/stb.git by Sean T. Barrett
