@@ -24,4 +24,5 @@ The faces in the dataset are from:
 - Our pictures (for us)
 
 Francis Lan and XiangLu Kong
+
 Project for W4995 - GPU Computing, Spring 2015
