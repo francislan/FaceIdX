@@ -15,6 +15,9 @@ To run the GPU version:
 To run the CPU version:
 > ./FaceIdX -cpu
 
+The paths can be relative. E.g., if FaceIdX is run from /code/src,
+you can type ../../data/demo/training to select the training set
+
 Using 2 single-file public domain librairies for image reading/writing:
 https://github.com/nothings/stb.git by Sean T. Barrett
 
