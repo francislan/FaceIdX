@@ -3,7 +3,7 @@ GPU aXelerated Face Identification
 
 To make:
 Go to /code/src directory,
-> mkdir obj
+> mkdir obj  
 > make
 
 To save eigenfaces and reconstructed faces to disk, you have to create the
