@@ -1,5 +1,0 @@
-Time taken for creating database on cpu: 430.4 ms
-Time taken for computing average face on cpu: 128.1 ms
-Time taken for saving average on disk on cpu: 22.2 ms
-Time taken for computing eigenfaces on cpu: 8359.7 ms
-Time taken for computing weighs on cpu: 2329.7 ms
