@@ -703,7 +703,10 @@ struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, stru
     GPU_CHECKERROR(
     cudaMalloc((void **)&d_partial_sum, num_blocks * sizeof(float))
     );
-    h_partial_sum = (float *)malloc(num_blocks * sizeof(float));
+    //h_partial_sum = (float *)malloc(num_blocks * sizeof(float));
+    GPU_CHECKERROR(
+    cudaMallocHost((void**)&h_partial_sum, num_blocks * sizeof(float))
+    );
     TEST_MALLOC(h_partial_sum);
 
     for (int i = 0; i < k; i++) {
@@ -736,7 +739,8 @@ struct FaceCoordinatesGPU ** compute_weighs_gpu(struct DatasetGPU *dataset, stru
             dataset->faces[i] = new_faces[i - n];
     }
 
-    free(h_partial_sum);
+    //free(h_partial_sum);
+    cudaFreeHost(h_partial_sum);
     GPU_CHECKERROR(cudaFree(d_partial_sum));
     if (!use_original_images) {
         GPU_CHECKERROR(cudaFree(d_images_to_use));
